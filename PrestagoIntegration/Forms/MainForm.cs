@@ -1,329 +1,421 @@
-
 using System;
 using System.Collections.Generic;
-using System.Data;
-using System.Drawing;
-using System.Net.Http;
 using System.Windows.Forms;
-using System.Threading.Tasks;
+using System.ComponentModel;
+using System.Drawing;
 using PrestagoIntegration.Models;
 using PrestagoIntegration.Services;
 using PrestagoIntegration.Utils;
+using PrestagoIntegration.Forms;
 
-namespace PrestagoIntegration.Forms
+namespace PrestagoIntegration
 {
     public partial class MainForm : Form
     {
-        private readonly AppConfig _config;
-        private readonly AuthService _authService;
-        private readonly ReceptionService _receptionService;
-        private readonly List<NSEItem> _nseItems = new List<NSEItem>();
+        private PrestagoApiService _apiService;
+        private List<ReceptionItem> _receptionItems = new List<ReceptionItem>();
+        private List<ExpeditionItem> _expeditionItems = new List<ExpeditionItem>();
+        private string _targetStockCode = "";
 
-        // Controls
-        private MenuStrip menuStrip;
-        private ToolStripMenuItem menuItemFile;
-        private ToolStripMenuItem menuItemConfiguration;
-        private ToolStripMenuItem menuItemExit;
+        // UI Controls
+        private TabControl tabControl;
+        private TabPage tabPageReception;
+        private TabPage tabPageExpedition;
         private TextBox textBoxStockOutletCode;
+        private Button buttonLogin;
+        private StatusStrip statusStrip;
+        private ToolStripStatusLabel statusLabel;
+
+        // Reception tab controls
         private TextBox textBoxEquipmentCode;
         private TextBox textBoxEquipmentName;
         private TextBox textBoxSerialNumber;
-        private TextBox textBoxStatus;
         private TextBox textBoxInterventionNumber;
-        private Button buttonAddNSE;
+        private ComboBox comboBoxState;
+        private Button buttonAddReception;
         private Button buttonSendReception;
-        private Button buttonClear;
-        private Button buttonTestConnection;
-        private DataGridView dataGridViewNSEs;
-        private StatusStrip statusStrip;
-        private ToolStripStatusLabel toolStripStatusLabel;
+        private DataGridView dataGridViewReception;
+
+        // Expedition tab controls
+        private TextBox textBoxExpEquipmentCode;
+        private TextBox textBoxExpEquipmentName;
+        private TextBox textBoxExpSerialNumber;
+        private TextBox textBoxTargetStockCode;
+        private Button buttonAddExpedition;
+        private Button buttonSendExpedition;
+        private DataGridView dataGridViewExpedition;
 
         public MainForm()
         {
-            // Chargement de la configuration
-            _config = AppConfig.Instance;
-
-            // Initialisation des services
-            var httpClient = new HttpClient
-            {
-                BaseAddress = new Uri(_config.ApiUrl)
-            };
-            _authService = new AuthService(httpClient, _config);
-            _receptionService = new ReceptionService(httpClient, _authService, _config);
-
             InitializeComponent();
-            LoadInitialData();
+
+            // Initialize API service with default URL
+            _apiService = new PrestagoApiService("https://prestago-test.pmu.fr/", "", "");
+
+            // Load configuration and setup UI
+            LoadConfiguration();
+            SetupDataGridViews();
         }
 
         private void InitializeComponent()
         {
-            this.Text = "Prestago Integration - Réception NSE";
-            this.Size = new Size(900, 700);
+            this.tabControl = new TabControl();
+            this.tabPageReception = new TabPage();
+            this.tabPageExpedition = new TabPage();
+            this.statusStrip = new StatusStrip();
+            this.statusLabel = new ToolStripStatusLabel();
+
+            // Main form settings
+            this.Text = "Intégration Prestago";
+            this.Size = new Size(800, 600);
             this.StartPosition = FormStartPosition.CenterScreen;
 
-            // Menu Strip
-            menuStrip = new MenuStrip();
-            menuItemFile = new ToolStripMenuItem("Fichier");
-            menuItemConfiguration = new ToolStripMenuItem("Configuration");
-            menuItemExit = new ToolStripMenuItem("Quitter");
+            // Tab Control
+            this.tabControl.Dock = DockStyle.Fill;
+            this.tabControl.Controls.Add(this.tabPageReception);
+            this.tabControl.Controls.Add(this.tabPageExpedition);
 
-            menuItemConfiguration.Click += MenuItemConfiguration_Click;
-            menuItemExit.Click += MenuItemExit_Click;
+            // Reception Tab
+            this.tabPageReception.Text = "Réception";
+            InitializeReceptionTab();
 
-            menuItemFile.DropDownItems.Add(menuItemConfiguration);
-            menuItemFile.DropDownItems.Add(new ToolStripSeparator());
-            menuItemFile.DropDownItems.Add(menuItemExit);
-
-            menuStrip.Items.Add(menuItemFile);
+            // Expedition Tab
+            this.tabPageExpedition.Text = "Expédition";
+            InitializeExpeditionTab();
 
             // Status Strip
-            statusStrip = new StatusStrip();
-            toolStripStatusLabel = new ToolStripStatusLabel("Prêt");
-            statusStrip.Items.Add(toolStripStatusLabel);
+            this.statusStrip.Items.Add(this.statusLabel);
+            this.statusLabel.Text = "Non connecté";
 
-            // Panel for Stock Outlet Code
-            var panelStockOutlet = new Panel
+            // Stock Outlet Code and Login button (common)
+            Panel panelTop = new Panel
             {
                 Dock = DockStyle.Top,
-                Height = 60,
+                Height = 50,
                 Padding = new Padding(10)
             };
 
-            var labelStockOutletCode = new Label
+            Label labelStockOutletCode = new Label
             {
                 Text = "Code Dépôt:",
                 Location = new Point(10, 15),
-                Size = new Size(100, 25)
+                Size = new Size(80, 20)
             };
 
             textBoxStockOutletCode = new TextBox
             {
-                Location = new Point(120, 15),
+                Location = new Point(100, 12),
                 Size = new Size(150, 25)
             };
 
-            buttonTestConnection = new Button
+            buttonLogin = new Button
             {
-                Text = "Tester Connexion",
-                Location = new Point(290, 14),
-                Size = new Size(130, 30)
+                Text = "Connexion",
+                Location = new Point(650, 10),
+                Size = new Size(100, 30)
             };
-            buttonTestConnection.Click += ButtonTestConnection_Click;
+            buttonLogin.Click += new EventHandler(buttonLogin_Click);
 
-            panelStockOutlet.Controls.Add(labelStockOutletCode);
-            panelStockOutlet.Controls.Add(textBoxStockOutletCode);
-            panelStockOutlet.Controls.Add(buttonTestConnection);
+            panelTop.Controls.Add(labelStockOutletCode);
+            panelTop.Controls.Add(textBoxStockOutletCode);
+            panelTop.Controls.Add(buttonLogin);
 
-            // Panel for NSE Input
-            var panelNseInput = new Panel
+            // Add all controls to the form
+            this.Controls.Add(this.tabControl);
+            this.Controls.Add(panelTop);
+            this.Controls.Add(this.statusStrip);
+        }
+
+        private void InitializeReceptionTab()
+        {
+            // Input Panel
+            Panel panelInput = new Panel
             {
                 Dock = DockStyle.Top,
-                Height = 210,
-                Padding = new Padding(10),
-                BorderStyle = BorderStyle.FixedSingle
+                Height = 200,
+                Padding = new Padding(10)
             };
 
-            var labelNseInput = new Label
-            {
-                Text = "Ajouter un NSE:",
-                Font = new Font("Arial", 12, FontStyle.Bold),
-                Location = new Point(10, 10),
-                Size = new Size(200, 25)
-            };
-
-            var labelEquipmentCode = new Label
+            // Controls for reception
+            Label labelEquipmentCode = new Label
             {
                 Text = "Code Équipement:",
-                Location = new Point(10, 45),
-                Size = new Size(150, 25)
+                Location = new Point(10, 20),
+                Size = new Size(120, 20)
             };
 
             textBoxEquipmentCode = new TextBox
             {
-                Location = new Point(160, 45),
-                Size = new Size(250, 25)
+                Location = new Point(140, 17),
+                Size = new Size(200, 25)
             };
 
-            var labelEquipmentName = new Label
+            Label labelEquipmentName = new Label
             {
                 Text = "Nom Équipement:",
-                Location = new Point(10, 75),
-                Size = new Size(150, 25)
+                Location = new Point(10, 50),
+                Size = new Size(120, 20)
             };
 
             textBoxEquipmentName = new TextBox
             {
-                Location = new Point(160, 75),
-                Size = new Size(250, 25)
+                Location = new Point(140, 47),
+                Size = new Size(200, 25)
             };
 
-            var labelSerialNumber = new Label
+            Label labelSerialNumber = new Label
             {
                 Text = "Numéro de Série:",
-                Location = new Point(10, 105),
-                Size = new Size(150, 25)
+                Location = new Point(10, 80),
+                Size = new Size(120, 20)
             };
 
             textBoxSerialNumber = new TextBox
             {
-                Location = new Point(160, 105),
-                Size = new Size(250, 25)
+                Location = new Point(140, 77),
+                Size = new Size(200, 25)
             };
 
-            var labelStatus = new Label
+            Label labelState = new Label
             {
-                Text = "Status (AVAILABLE):",
-                Location = new Point(10, 135),
-                Size = new Size(150, 25)
+                Text = "État:",
+                Location = new Point(10, 110),
+                Size = new Size(120, 20)
             };
 
-            textBoxStatus = new TextBox
+            comboBoxState = new ComboBox
             {
-                Location = new Point(160, 135),
-                Size = new Size(250, 25),
-                Text = "AVAILABLE"
+                Location = new Point(140, 107),
+                Size = new Size(200, 25),
+                DropDownStyle = ComboBoxStyle.DropDownList
             };
+            comboBoxState.Items.AddRange(new string[] { "AVAILABLE", "INSTALLED" });
+            comboBoxState.SelectedIndex = 0;
 
-            var labelInterventionNumber = new Label
+            Label labelInterventionNumber = new Label
             {
                 Text = "N° Intervention:",
-                Location = new Point(10, 165),
-                Size = new Size(150, 25)
+                Location = new Point(10, 140),
+                Size = new Size(120, 20)
             };
 
             textBoxInterventionNumber = new TextBox
             {
-                Location = new Point(160, 165),
-                Size = new Size(250, 25)
+                Location = new Point(140, 137),
+                Size = new Size(200, 25)
             };
 
-            buttonAddNSE = new Button
+            buttonAddReception = new Button
             {
-                Text = "Ajouter NSE",
-                Location = new Point(430, 105),
+                Text = "Ajouter",
+                Location = new Point(400, 60),
+                Size = new Size(120, 40)
+            };
+            buttonAddReception.Click += new EventHandler(buttonAddReception_Click);
+
+            buttonSendReception = new Button
+            {
+                Text = "Envoyer Réception",
+                Location = new Point(550, 60),
                 Size = new Size(150, 40)
             };
-            buttonAddNSE.Click += ButtonAddNSE_Click;
+            buttonSendReception.Click += new EventHandler(buttonSendReception_Click);
 
-            panelNseInput.Controls.Add(labelNseInput);
-            panelNseInput.Controls.Add(labelEquipmentCode);
-            panelNseInput.Controls.Add(textBoxEquipmentCode);
-            panelNseInput.Controls.Add(labelEquipmentName);
-            panelNseInput.Controls.Add(textBoxEquipmentName);
-            panelNseInput.Controls.Add(labelSerialNumber);
-            panelNseInput.Controls.Add(textBoxSerialNumber);
-            panelNseInput.Controls.Add(labelStatus);
-            panelNseInput.Controls.Add(textBoxStatus);
-            panelNseInput.Controls.Add(labelInterventionNumber);
-            panelNseInput.Controls.Add(textBoxInterventionNumber);
-            panelNseInput.Controls.Add(buttonAddNSE);
+            // Add controls to panel
+            panelInput.Controls.Add(labelEquipmentCode);
+            panelInput.Controls.Add(textBoxEquipmentCode);
+            panelInput.Controls.Add(labelEquipmentName);
+            panelInput.Controls.Add(textBoxEquipmentName);
+            panelInput.Controls.Add(labelSerialNumber);
+            panelInput.Controls.Add(textBoxSerialNumber);
+            panelInput.Controls.Add(labelState);
+            panelInput.Controls.Add(comboBoxState);
+            panelInput.Controls.Add(labelInterventionNumber);
+            panelInput.Controls.Add(textBoxInterventionNumber);
+            panelInput.Controls.Add(buttonAddReception);
+            panelInput.Controls.Add(buttonSendReception);
 
-            // Panel for NSE List
-            var panelNseList = new Panel
-            {
-                Dock = DockStyle.Fill,
-                Padding = new Padding(10)
-            };
-
-            var labelNseList = new Label
-            {
-                Text = "Liste des NSE à envoyer:",
-                Font = new Font("Arial", 12, FontStyle.Bold),
-                Dock = DockStyle.Top,
-                Height = 25
-            };
-
-            dataGridViewNSEs = new DataGridView
+            // DataGridView
+            dataGridViewReception = new DataGridView
             {
                 Dock = DockStyle.Fill,
                 AllowUserToAddRows = false,
                 AllowUserToDeleteRows = false,
                 ReadOnly = true,
-                SelectionMode = DataGridViewSelectionMode.FullRowSelect,
+                AutoGenerateColumns = true,
                 AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
-                RowHeadersVisible = false
+                SelectionMode = DataGridViewSelectionMode.FullRowSelect
             };
 
-            // Panel for buttons
-            var panelButtons = new Panel
+            // Add to tab page
+            this.tabPageReception.Controls.Add(dataGridViewReception);
+            this.tabPageReception.Controls.Add(panelInput);
+        }
+
+        private void InitializeExpeditionTab()
+        {
+            // Input Panel
+            Panel panelInput = new Panel
             {
-                Dock = DockStyle.Bottom,
-                Height = 60,
+                Dock = DockStyle.Top,
+                Height = 200,
                 Padding = new Padding(10)
             };
 
-            buttonSendReception = new Button
+            // Controls for expedition
+            Label labelExpEquipmentCode = new Label
             {
-                Text = "Envoyer Réception",
-                Size = new Size(200, 40),
-                Location = new Point(570, 10)
+                Text = "Code Équipement:",
+                Location = new Point(10, 20),
+                Size = new Size(120, 20)
             };
-            buttonSendReception.Click += ButtonSendReception_Click;
 
-            buttonClear = new Button
+            textBoxExpEquipmentCode = new TextBox
             {
-                Text = "Effacer Liste",
-                Size = new Size(150, 40),
-                Location = new Point(400, 10)
+                Location = new Point(140, 17),
+                Size = new Size(200, 25)
             };
-            buttonClear.Click += ButtonClear_Click;
 
-            panelButtons.Controls.Add(buttonSendReception);
-            panelButtons.Controls.Add(buttonClear);
+            Label labelExpEquipmentName = new Label
+            {
+                Text = "Nom Équipement:",
+                Location = new Point(10, 50),
+                Size = new Size(120, 20)
+            };
 
-            panelNseList.Controls.Add(dataGridViewNSEs);
-            panelNseList.Controls.Add(labelNseList);
+            textBoxExpEquipmentName = new TextBox
+            {
+                Location = new Point(140, 47),
+                Size = new Size(200, 25)
+            };
 
-            // Add all controls to form
-            this.Controls.Add(panelNseList);
-            this.Controls.Add(panelButtons);
-            this.Controls.Add(panelNseInput);
-            this.Controls.Add(panelStockOutlet);
-            this.Controls.Add(statusStrip);
-            this.Controls.Add(menuStrip);
-            this.MainMenuStrip = menuStrip;
+            Label labelExpSerialNumber = new Label
+            {
+                Text = "Numéro de Série:",
+                Location = new Point(10, 80),
+                Size = new Size(120, 20)
+            };
+
+            textBoxExpSerialNumber = new TextBox
+            {
+                Location = new Point(140, 77),
+                Size = new Size(200, 25)
+            };
+
+            Label labelTargetStockCode = new Label
+            {
+                Text = "Code Dépôt Cible:",
+                Location = new Point(10, 110),
+                Size = new Size(120, 20)
+            };
+
+            textBoxTargetStockCode = new TextBox
+            {
+                Location = new Point(140, 107),
+                Size = new Size(200, 25)
+            };
+
+            buttonAddExpedition = new Button
+            {
+                Text = "Ajouter",
+                Location = new Point(400, 60),
+                Size = new Size(120, 40)
+            };
+            buttonAddExpedition.Click += new EventHandler(buttonAddExpedition_Click);
+
+            buttonSendExpedition = new Button
+            {
+                Text = "Envoyer Expédition",
+                Location = new Point(550, 60),
+                Size = new Size(150, 40)
+            };
+            buttonSendExpedition.Click += new EventHandler(buttonSendExpedition_Click);
+
+            // Add controls to panel
+            panelInput.Controls.Add(labelExpEquipmentCode);
+            panelInput.Controls.Add(textBoxExpEquipmentCode);
+            panelInput.Controls.Add(labelExpEquipmentName);
+            panelInput.Controls.Add(textBoxExpEquipmentName);
+            panelInput.Controls.Add(labelExpSerialNumber);
+            panelInput.Controls.Add(textBoxExpSerialNumber);
+            panelInput.Controls.Add(labelTargetStockCode);
+            panelInput.Controls.Add(textBoxTargetStockCode);
+            panelInput.Controls.Add(buttonAddExpedition);
+            panelInput.Controls.Add(buttonSendExpedition);
+
+            // DataGridView
+            dataGridViewExpedition = new DataGridView
+            {
+                Dock = DockStyle.Fill,
+                AllowUserToAddRows = false,
+                AllowUserToDeleteRows = false,
+                ReadOnly = true,
+                AutoGenerateColumns = true,
+                AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
+                SelectionMode = DataGridViewSelectionMode.FullRowSelect
+            };
+
+            // Add to tab page
+            this.tabPageExpedition.Controls.Add(dataGridViewExpedition);
+            this.tabPageExpedition.Controls.Add(panelInput);
         }
 
-        private void LoadInitialData()
+        private void LoadConfiguration()
         {
-            // Initialize NSE List
-            RefreshNSEList();
+            // Load configuration from settings or ask user
+            textBoxStockOutletCode.Text = "600048"; // Default for Eurodislog
+        }
 
-            // Set default values
-            textBoxStockOutletCode.Text = _config.DefaultStockOutletCode;
-            textBoxStatus.Text = "AVAILABLE";
+        private void SetupDataGridViews()
+        {
+            // Setup DataGridView for reception items
+            var bindingSource1 = new BindingSource();
+            bindingSource1.DataSource = _receptionItems;
+            dataGridViewReception.DataSource = bindingSource1;
 
-            // Check if configuration is missing
-            if (string.IsNullOrEmpty(_config.Login) || string.IsNullOrEmpty(_config.Password))
+            // Setup DataGridView for expedition items
+            var bindingSource2 = new BindingSource();
+            bindingSource2.DataSource = _expeditionItems;
+            dataGridViewExpedition.DataSource = bindingSource2;
+        }
+
+        private async void buttonLogin_Click(object sender, EventArgs e)
+        {
+            // Show login dialog and authenticate
+            using (var loginForm = new LoginForm())
             {
-                MessageBox.Show(
-                    "La configuration n'est pas complète. Veuillez configurer vos identifiants Prestago.",
-                    "Configuration requise",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Information
-                );
-                OpenConfigurationForm();
+                if (loginForm.ShowDialog() == DialogResult.OK)
+                {
+                    try
+                    {
+                        Cursor = Cursors.WaitCursor;
+                        bool success = await _apiService.AuthenticateAsync(loginForm.Username, loginForm.Password);
+                        if (success)
+                        {
+                            MessageBox.Show("Connexion réussie!", "Succès", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                            statusLabel.Text = "Connecté";
+                        }
+                        else
+                        {
+                            MessageBox.Show("Échec de la connexion. Vérifiez vos identifiants.", "Erreur", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        MessageBox.Show($"Erreur: {ex.Message}", "Erreur", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                        Logger.LogError("Login", ex);
+                    }
+                    finally
+                    {
+                        Cursor = Cursors.Default;
+                    }
+                }
             }
         }
 
-        private void RefreshNSEList()
+        private void buttonAddReception_Click(object sender, EventArgs e)
         {
-            // Créer une source de données pour le DataGridView
-            var bindingSource = new BindingSource();
-            bindingSource.DataSource = _nseItems;
-            dataGridViewNSEs.DataSource = bindingSource;
-
-            // Mettre à jour l'état des boutons
-            buttonSendReception.Enabled = _nseItems.Count > 0;
-            buttonClear.Enabled = _nseItems.Count > 0;
-
-            // Mettre à jour le statut
-            toolStripStatusLabel.Text = $"Prêt - {_nseItems.Count} NSE(s) en attente d'envoi";
-        }
-
-        private void ButtonAddNSE_Click(object sender, EventArgs e)
-        {
-            // Validation des entrées
+            // Validate input fields
             if (string.IsNullOrWhiteSpace(textBoxEquipmentCode.Text) ||
                 string.IsNullOrWhiteSpace(textBoxEquipmentName.Text) ||
                 string.IsNullOrWhiteSpace(textBoxSerialNumber.Text))
@@ -332,207 +424,189 @@ namespace PrestagoIntegration.Forms
                 return;
             }
 
-            // Créer un nouvel NSE
-            var nseItem = new NSEItem
+            // Create new item
+            var item = new ReceptionItem
             {
-                StockOutletCode = textBoxStockOutletCode.Text,
                 EquipmentCode = textBoxEquipmentCode.Text,
                 EquipmentName = textBoxEquipmentName.Text,
                 SerialNumber = textBoxSerialNumber.Text,
-                Status = string.IsNullOrWhiteSpace(textBoxStatus.Text) ? "AVAILABLE" : textBoxStatus.Text,
-                InterventionNumber = textBoxInterventionNumber.Text ?? ""
+                State = comboBoxState.Text
             };
 
-            // Vérifier si le NSE existe déjà
-            bool serialExists = _nseItems.Exists(item => item.SerialNumber == nseItem.SerialNumber);
-            if (serialExists)
+            // Try to parse intervention number if provided
+            if (!string.IsNullOrEmpty(textBoxInterventionNumber.Text))
             {
-                MessageBox.Show("Ce numéro de série existe déjà dans la liste.", "Doublon", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                return;
+                if (int.TryParse(textBoxInterventionNumber.Text, out int interventionNumber))
+                {
+                    item.InterventionNumber = interventionNumber;
+                }
+                else
+                {
+                    MessageBox.Show("Le numéro d'intervention doit être un nombre entier.", "Validation", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
             }
 
-            // Ajouter à la liste
-            _nseItems.Add(nseItem);
-            RefreshNSEList();
+            // Add to list
+            _receptionItems.Add(item);
 
-            // Réinitialiser les champs
-            textBoxEquipmentCode.Text = "";
-            textBoxEquipmentName.Text = "";
-            textBoxSerialNumber.Text = "";
-            textBoxInterventionNumber.Text = "";
-            textBoxEquipmentCode.Focus();
+            // Refresh grid
+            RefreshReceptionGrid();
 
-            Logger.Log($"NSE ajouté: {nseItem.SerialNumber}");
+            // Clear fields
+            ClearReceptionFields();
+
+            Logger.Log($"NSE ajouté pour réception: {item.SerialNumber}");
         }
 
-        private async void ButtonSendReception_Click(object sender, EventArgs e)
+        private async void buttonSendReception_Click(object sender, EventArgs e)
         {
-            if (_nseItems.Count == 0)
+            if (_receptionItems.Count == 0)
             {
-                MessageBox.Show("Veuillez ajouter au moins un NSE avant d'envoyer.", "Liste vide", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                MessageBox.Show("Aucun équipement à envoyer.", "Validation", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
-
-            // Confirmation
-            DialogResult result = MessageBox.Show(
-                $"Êtes-vous sûr de vouloir envoyer {_nseItems.Count} NSE(s) au dépôt {textBoxStockOutletCode.Text}?",
-                "Confirmation d'envoi",
-                MessageBoxButtons.YesNo,
-                MessageBoxIcon.Question
-            );
-
-            if (result != DialogResult.Yes)
-                return;
-
-            // Désactiver les contrôles pendant l'envoi
-            SetControlsEnabled(false);
-            toolStripStatusLabel.Text = "Envoi en cours...";
 
             try
             {
-                // Si le code dépôt a changé, mettre à jour tous les NSE
-                string stockOutletCode = textBoxStockOutletCode.Text;
-                foreach (var nse in _nseItems)
-                {
-                    nse.StockOutletCode = stockOutletCode;
-                }
-
-                // Envoi de la réception
-                bool success = await _receptionService.SendReceptionAsync(stockOutletCode, _nseItems);
+                Cursor = Cursors.WaitCursor;
+                bool success = await _apiService.SendReceptionAsync(textBoxStockOutletCode.Text, _receptionItems);
 
                 if (success)
                 {
                     MessageBox.Show("Réception envoyée avec succès!", "Succès", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                    _nseItems.Clear();
-                    RefreshNSEList();
-                    Logger.Log($"Réception réussie - {stockOutletCode}");
+                    _receptionItems.Clear();
+                    RefreshReceptionGrid();
+                    Logger.Log($"Réception envoyée avec succès - {_receptionItems.Count} équipements");
                 }
                 else
                 {
-                    MessageBox.Show(
-                        "Échec de l'envoi de la réception. Consultez les logs pour plus de détails.",
-                        "Erreur",
-                        MessageBoxButtons.OK,
-                        MessageBoxIcon.Error
-                    );
-                    Logger.Log("Échec de la réception");
+                    MessageBox.Show("Échec de l'envoi de la réception.", "Erreur", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    Logger.Log("Échec de l'envoi de la réception");
                 }
             }
             catch (Exception ex)
             {
-                MessageBox.Show($"Erreur lors de l'envoi : {ex.Message}", "Erreur", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                Logger.LogError("Envoi réception", ex);
+                MessageBox.Show($"Erreur: {ex.Message}", "Erreur", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                Logger.LogError("SendReception", ex);
             }
             finally
             {
-                // Réactiver les contrôles
-                SetControlsEnabled(true);
-                toolStripStatusLabel.Text = "Prêt";
+                Cursor = Cursors.Default;
             }
         }
-
-        private void ButtonClear_Click(object sender, EventArgs e)
+        private void RefreshReceptionGrid()
         {
-            if (_nseItems.Count == 0)
-                return;
+            ((BindingSource)dataGridViewReception.DataSource).ResetBindings(false);
+        }
 
-            DialogResult result = MessageBox.Show(
-                "Êtes-vous sûr de vouloir effacer tous les NSE de la liste?",
-                "Confirmation",
-                MessageBoxButtons.YesNo,
-                MessageBoxIcon.Question
-            );
+        private void ClearReceptionFields()
+        {
+            textBoxEquipmentCode.Text = "";
+            textBoxEquipmentName.Text = "";
+            textBoxSerialNumber.Text = "";
+            textBoxInterventionNumber.Text = "";
+            comboBoxState.SelectedIndex = 0; // Reset to "AVAILABLE"
+        }
 
-            if (result == DialogResult.Yes)
+        private void buttonAddExpedition_Click(object sender, EventArgs e)
+        {
+            // Validate input fields
+            if (string.IsNullOrWhiteSpace(textBoxExpEquipmentCode.Text) ||
+                string.IsNullOrWhiteSpace(textBoxExpEquipmentName.Text) ||
+                string.IsNullOrWhiteSpace(textBoxExpSerialNumber.Text))
             {
-                _nseItems.Clear();
-                RefreshNSEList();
-                Logger.Log("Liste NSE effacée");
+                MessageBox.Show("Veuillez remplir tous les champs obligatoires.", "Validation", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
             }
+
+            // Save target stock code
+            if (!string.IsNullOrWhiteSpace(textBoxTargetStockCode.Text))
+            {
+                _targetStockCode = textBoxTargetStockCode.Text;
+            }
+
+            // Create new item
+            var item = new ExpeditionItem
+            {
+                EquipmentCode = textBoxExpEquipmentCode.Text,
+                EquipmentName = textBoxExpEquipmentName.Text,
+                SerialNumber = textBoxExpSerialNumber.Text
+            };
+
+            // Add to list
+            _expeditionItems.Add(item);
+
+            // Refresh grid
+            RefreshExpeditionGrid();
+
+            // Clear fields
+            ClearExpeditionFields();
+
+            Logger.Log($"NSE ajouté pour expédition: {item.SerialNumber}");
         }
 
-        private async void ButtonTestConnection_Click(object sender, EventArgs e)
+        private async void buttonSendExpedition_Click(object sender, EventArgs e)
         {
-            SetControlsEnabled(false);
-            toolStripStatusLabel.Text = "Test de connexion en cours...";
+            if (_expeditionItems.Count == 0)
+            {
+                MessageBox.Show("Aucun équipement à expédier.", "Validation", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(_targetStockCode))
+            {
+                MessageBox.Show("Veuillez spécifier un code de dépôt cible.", "Validation", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
 
             try
             {
-                bool result = await _authService.AuthenticateAsync();
+                Cursor = Cursors.WaitCursor;
 
-                if (result)
+                var expeditionRequest = new ExpeditionRequest
                 {
-                    MessageBox.Show(
-                        "Connexion à l'API Prestago réussie!",
-                        "Succès",
-                        MessageBoxButtons.OK,
-                        MessageBoxIcon.Information
-                    );
-                    toolStripStatusLabel.Text = "Connexion réussie";
-                    Logger.Log("Test de connexion réussi");
+                    StockEquipments = _expeditionItems,
+                    TargetStockCode = _targetStockCode
+                };
+
+                bool success = await _apiService.SendExpeditionAsync(textBoxStockOutletCode.Text, expeditionRequest);
+
+                if (success)
+                {
+                    MessageBox.Show("Expédition envoyée avec succès!", "Succès", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    _expeditionItems.Clear();
+                    RefreshExpeditionGrid();
+                    Logger.Log($"Expédition envoyée avec succès - {expeditionRequest.StockEquipments.Count} équipements");
                 }
                 else
                 {
-                    MessageBox.Show(
-                        "Échec de la connexion à l'API Prestago. Vérifiez vos identifiants et la configuration.",
-                        "Erreur",
-                        MessageBoxButtons.OK,
-                        MessageBoxIcon.Error
-                    );
-                    toolStripStatusLabel.Text = "Échec de connexion";
-                    Logger.Log("Échec du test de connexion");
+                    MessageBox.Show("Échec de l'envoi de l'expédition.", "Erreur", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    Logger.Log("Échec de l'envoi de l'expédition");
                 }
             }
             catch (Exception ex)
             {
-                MessageBox.Show(
-                    $"Erreur de connexion : {ex.Message}",
-                    "Erreur",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Error
-                );
-                Logger.LogError("Test connexion", ex);
-                toolStripStatusLabel.Text = "Erreur de connexion";
+                MessageBox.Show($"Erreur: {ex.Message}", "Erreur", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                Logger.LogError("SendExpedition", ex);
             }
             finally
             {
-                SetControlsEnabled(true);
+                Cursor = Cursors.Default;
             }
         }
 
-        private void MenuItemConfiguration_Click(object sender, EventArgs e)
+        private void RefreshExpeditionGrid()
         {
-            OpenConfigurationForm();
+            ((BindingSource)dataGridViewExpedition.DataSource).ResetBindings(false);
         }
 
-        private void OpenConfigurationForm()
+        private void ClearExpeditionFields()
         {
-            var configForm = new ConfigurationForm(_config);
-            if (configForm.ShowDialog() == DialogResult.OK)
-            {
-                // Rafraîchir les valeurs si nécessaire
-                textBoxStockOutletCode.Text = _config.DefaultStockOutletCode;
-            }
-        }
-
-        private void MenuItemExit_Click(object sender, EventArgs e)
-        {
-            Close();
-        }
-
-        private void SetControlsEnabled(bool enabled)
-        {
-            buttonAddNSE.Enabled = enabled;
-            buttonSendReception.Enabled = enabled && _nseItems.Count > 0;
-            buttonClear.Enabled = enabled && _nseItems.Count > 0;
-            buttonTestConnection.Enabled = enabled;
-            textBoxEquipmentCode.Enabled = enabled;
-            textBoxEquipmentName.Enabled = enabled;
-            textBoxSerialNumber.Enabled = enabled;
-            textBoxStatus.Enabled = enabled;
-            textBoxInterventionNumber.Enabled = enabled;
-            textBoxStockOutletCode.Enabled = enabled;
-            menuItemConfiguration.Enabled = enabled;
+            textBoxExpEquipmentCode.Text = "";
+            textBoxExpEquipmentName.Text = "";
+            textBoxExpSerialNumber.Text = "";
+            // Ne pas effacer le code de dépôt cible
         }
     }
 }
