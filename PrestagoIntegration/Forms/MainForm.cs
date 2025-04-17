@@ -1,8 +1,8 @@
 using System;
 using System.Collections.Generic;
+using System.Drawing;
 using System.Windows.Forms;
 using System.ComponentModel;
-using System.Drawing;
 using PrestagoIntegration.Models;
 using PrestagoIntegration.Services;
 using PrestagoIntegration.Utils;
@@ -12,358 +12,670 @@ namespace PrestagoIntegration
 {
     public partial class MainForm : Form
     {
-        private PrestagoApiService _apiService;
+        private PrestagoService _prestagoService;
+        private readonly AppConfig _config;
         private List<ReceptionItem> _receptionItems = new List<ReceptionItem>();
         private List<ExpeditionItem> _expeditionItems = new List<ExpeditionItem>();
         private string _targetStockCode = "";
 
+        // Constantes pour les couleurs et styles
+        private readonly Color PRIMARY_COLOR = Color.FromArgb(0, 120, 215);     // Bleu principal
+        private readonly Color SECONDARY_COLOR = Color.FromArgb(243, 243, 243); // Gris clair
+        private readonly Color SUCCESS_COLOR = Color.FromArgb(40, 167, 69);     // Vert
+        private readonly Color WARNING_COLOR = Color.FromArgb(255, 193, 7);     // Jaune
+        private readonly Color DANGER_COLOR = Color.FromArgb(220, 53, 69);      // Rouge
+        private readonly Color TEXT_COLOR = Color.FromArgb(33, 37, 41);         // Gris foncé pour texte
+        private readonly Font HEADER_FONT = new Font("Segoe UI", 16, FontStyle.Regular);
+        private readonly Font NORMAL_FONT = new Font("Segoe UI", 9, FontStyle.Regular);
+        private readonly Font BUTTON_FONT = new Font("Segoe UI", 9, FontStyle.Regular);
+
         // UI Controls
+        private MenuStrip menuStrip;
         private TabControl tabControl;
         private TabPage tabPageReception;
         private TabPage tabPageExpedition;
+        private Panel panelHeader;
+        private Label labelTitle;
         private TextBox textBoxStockOutletCode;
         private Button buttonLogin;
+        private Button buttonSettings;
         private StatusStrip statusStrip;
         private ToolStripStatusLabel statusLabel;
-
-        // Reception tab controls
-        private TextBox textBoxEquipmentCode;
-        private TextBox textBoxEquipmentName;
-        private TextBox textBoxSerialNumber;
-        private TextBox textBoxInterventionNumber;
-        private ComboBox comboBoxState;
-        private Button buttonAddReception;
-        private Button buttonSendReception;
-        private DataGridView dataGridViewReception;
-
-        // Expedition tab controls
-        private TextBox textBoxExpEquipmentCode;
-        private TextBox textBoxExpEquipmentName;
-        private TextBox textBoxExpSerialNumber;
-        private TextBox textBoxTargetStockCode;
-        private Button buttonAddExpedition;
-        private Button buttonSendExpedition;
-        private DataGridView dataGridViewExpedition;
+        private ToolStripProgressBar progressBar;
 
         public MainForm()
         {
             InitializeComponent();
 
-            // Initialize API service with default URL
-            _apiService = new PrestagoApiService("https://prestago-test.pmu.fr/", "", "");
+            // Charger la configuration
+            _config = AppConfig.Instance;
 
-            // Load configuration and setup UI
+            // Initialiser le service avec les valeurs de configuration
+            _prestagoService = new PrestagoService(
+                _config.ApiUrl,
+                _config.Login,
+                _config.Password);
+
+            // Charger configuration et configurer UI
             LoadConfiguration();
             SetupDataGridViews();
+
+            // Tester la connexion automatiquement si des identifiants sont déjà configurés
+            if (!string.IsNullOrEmpty(_config.Login) && !string.IsNullOrEmpty(_config.Password))
+            {
+                TestConnectionAsync();
+            }
         }
 
         private void InitializeComponent()
         {
-            this.tabControl = new TabControl();
-            this.tabPageReception = new TabPage();
-            this.tabPageExpedition = new TabPage();
-            this.statusStrip = new StatusStrip();
-            this.statusLabel = new ToolStripStatusLabel();
+            this.SuspendLayout();
 
-            // Main form settings
-            this.Text = "Intégration Prestago";
-            this.Size = new Size(800, 600);
+            // Configuration de base du formulaire
+            this.Text = "PMU Prestago Integration";
+            this.Size = new Size(1024, 768);
             this.StartPosition = FormStartPosition.CenterScreen;
+            this.Font = NORMAL_FONT;
+            this.BackColor = SECONDARY_COLOR;
+            this.ForeColor = TEXT_COLOR;
 
-            // Tab Control
-            this.tabControl.Dock = DockStyle.Fill;
-            this.tabControl.Controls.Add(this.tabPageReception);
-            this.tabControl.Controls.Add(this.tabPageExpedition);
-
-            // Reception Tab
-            this.tabPageReception.Text = "Réception";
-            InitializeReceptionTab();
-
-            // Expedition Tab
-            this.tabPageExpedition.Text = "Expédition";
-            InitializeExpeditionTab();
-
-            // Status Strip
-            this.statusStrip.Items.Add(this.statusLabel);
-            this.statusLabel.Text = "Non connecté";
-
-            // Stock Outlet Code and Login button (common)
-            Panel panelTop = new Panel
+            // Menu principal
+            menuStrip = new MenuStrip
             {
-                Dock = DockStyle.Top,
-                Height = 50,
-                Padding = new Padding(10)
+                BackColor = PRIMARY_COLOR,
+                ForeColor = Color.White,
+                Padding = new Padding(6, 2, 0, 2),
+                Font = NORMAL_FONT
             };
 
-            Label labelStockOutletCode = new Label
+            var fileMenuItem = new ToolStripMenuItem("Fichier");
+            var configMenuItem = new ToolStripMenuItem("Configuration");
+            configMenuItem.Click += (s, e) => ShowConfigurationForm();
+
+            var aboutMenuItem = new ToolStripMenuItem("À propos");
+            aboutMenuItem.Click += (s, e) => ShowAboutDialog();
+
+            var exitMenuItem = new ToolStripMenuItem("Quitter");
+            exitMenuItem.Click += (s, e) => Application.Exit();
+
+            fileMenuItem.DropDownItems.Add(configMenuItem);
+            fileMenuItem.DropDownItems.Add(new ToolStripSeparator());
+            fileMenuItem.DropDownItems.Add(exitMenuItem);
+
+            var helpMenuItem = new ToolStripMenuItem("Aide");
+            helpMenuItem.DropDownItems.Add(aboutMenuItem);
+
+            menuStrip.Items.Add(fileMenuItem);
+            menuStrip.Items.Add(helpMenuItem);
+
+            // En-tête de l'application
+            panelHeader = new Panel
+            {
+                Dock = DockStyle.Top,
+                Height = 80,
+                BackColor = Color.White,
+                BorderStyle = BorderStyle.None,
+                Padding = new Padding(20, 10, 20, 10)
+            };
+
+            labelTitle = new Label
+            {
+                Text = "INTÉGRATION PRESTAGO PMU",
+                Font = HEADER_FONT,
+                ForeColor = PRIMARY_COLOR,
+                AutoSize = true,
+                Location = new Point(20, 20)
+            };
+
+            // Panel pour le code de dépôt et la connexion
+            var panelAuthentication = new Panel
+            {
+                Dock = DockStyle.Top,
+                Height = 60,
+                BackColor = Color.White,
+                BorderStyle = BorderStyle.None,
+                Padding = new Padding(20, 10, 20, 10)
+            };
+
+            var labelStockOutletCode = new Label
             {
                 Text = "Code Dépôt:",
-                Location = new Point(10, 15),
-                Size = new Size(80, 20)
+                AutoSize = true,
+                Location = new Point(20, 20),
+                ForeColor = TEXT_COLOR
             };
 
             textBoxStockOutletCode = new TextBox
             {
-                Location = new Point(100, 12),
-                Size = new Size(150, 25)
+                Location = new Point(120, 17),
+                Size = new Size(150, 25),
+                BorderStyle = BorderStyle.FixedSingle,
+                Font = NORMAL_FONT
             };
 
             buttonLogin = new Button
             {
-                Text = "Connexion",
-                Location = new Point(650, 10),
-                Size = new Size(100, 30)
+                Text = "Se connecter",
+                Location = new Point(650, 15),
+                Size = new Size(120, 30),
+                FlatStyle = FlatStyle.Flat,
+                BackColor = PRIMARY_COLOR,
+                ForeColor = Color.White,
+                Font = BUTTON_FONT,
+                Cursor = Cursors.Hand
             };
-            buttonLogin.Click += new EventHandler(buttonLogin_Click);
+            buttonLogin.FlatAppearance.BorderSize = 0;
+            buttonLogin.Click += buttonLogin_Click;
 
-            panelTop.Controls.Add(labelStockOutletCode);
-            panelTop.Controls.Add(textBoxStockOutletCode);
-            panelTop.Controls.Add(buttonLogin);
+            buttonSettings = new Button
+            {
+                Text = "⚙️ Paramètres",
+                Location = new Point(780, 15),
+                Size = new Size(120, 30),
+                FlatStyle = FlatStyle.Flat,
+                BackColor = SECONDARY_COLOR,
+                ForeColor = TEXT_COLOR,
+                Font = BUTTON_FONT,
+                Cursor = Cursors.Hand
+            };
+            buttonSettings.FlatAppearance.BorderSize = 0;
+            buttonSettings.Click += (s, e) => ShowConfigurationForm();
 
-            // Add all controls to the form
-            this.Controls.Add(this.tabControl);
-            this.Controls.Add(panelTop);
-            this.Controls.Add(this.statusStrip);
+            panelAuthentication.Controls.Add(labelStockOutletCode);
+            panelAuthentication.Controls.Add(textBoxStockOutletCode);
+            panelAuthentication.Controls.Add(buttonLogin);
+            panelAuthentication.Controls.Add(buttonSettings);
+
+            // Barre de statut
+            statusStrip = new StatusStrip
+            {
+                BackColor = Color.White,
+                SizingGrip = false
+            };
+
+            statusLabel = new ToolStripStatusLabel
+            {
+                Text = "Non connecté",
+                BorderSides = ToolStripStatusLabelBorderSides.Right,
+                BorderStyle = Border3DStyle.Etched
+            };
+
+            progressBar = new ToolStripProgressBar
+            {
+                Visible = false,
+                Width = 100
+            };
+
+            var statusVersion = new ToolStripStatusLabel
+            {
+                Text = "v1.0.0",
+                Alignment = ToolStripItemAlignment.Right
+            };
+
+            statusStrip.Items.Add(statusLabel);
+            statusStrip.Items.Add(progressBar);
+            statusStrip.Items.Add(statusVersion);
+
+            // TabControl pour réception et expédition
+            tabControl = new TabControl
+            {
+                Dock = DockStyle.Fill,
+                Appearance = TabAppearance.Normal,
+                SizeMode = TabSizeMode.Normal,
+                Font = NORMAL_FONT,
+                Padding = new Point(15, 5)
+            };
+
+            tabPageReception = new TabPage
+            {
+                Text = "Réception de NSE",
+                Padding = new Padding(10),
+                BackColor = Color.White
+            };
+
+            tabPageExpedition = new TabPage
+            {
+                Text = "Expédition de NSE",
+                Padding = new Padding(10),
+                BackColor = Color.White
+            };
+
+            tabControl.Controls.Add(tabPageReception);
+            tabControl.Controls.Add(tabPageExpedition);
+
+            // Initialiser les onglets
+            InitializeReceptionTab();
+            InitializeExpeditionTab();
+
+            // Ajouter les contrôles au formulaire
+            this.Controls.Add(tabControl);
+            this.Controls.Add(panelAuthentication);
+            this.Controls.Add(panelHeader);
+            this.Controls.Add(statusStrip);
+            this.Controls.Add(menuStrip);
+            this.MainMenuStrip = menuStrip;
+
+            panelHeader.Controls.Add(labelTitle);
+
+            this.ResumeLayout(false);
+            this.PerformLayout();
         }
 
         private void InitializeReceptionTab()
         {
-            // Input Panel
-            Panel panelInput = new Panel
+            // Panel pour les contrôles de saisie
+            GroupBox groupBoxInput = new GroupBox
             {
+                Text = "Ajout d'un équipement",
                 Dock = DockStyle.Top,
                 Height = 200,
-                Padding = new Padding(10)
+                Padding = new Padding(15),
+                Font = new Font(NORMAL_FONT, FontStyle.Bold)
             };
 
-            // Controls for reception
-            Label labelEquipmentCode = new Label
+            // Créer une disposition en tableau pour les champs de saisie
+            TableLayoutPanel tableControls = new TableLayoutPanel
             {
-                Text = "Code Équipement:",
-                Location = new Point(10, 20),
-                Size = new Size(120, 20)
+                Dock = DockStyle.Fill,
+                ColumnCount = 3,
+                RowCount = 5,
+                Padding = new Padding(0, 10, 0, 0)
             };
 
-            textBoxEquipmentCode = new TextBox
+            tableControls.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 30F));
+            tableControls.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 40F));
+            tableControls.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 30F));
+
+            for (int i = 0; i < tableControls.RowCount; i++)
             {
-                Location = new Point(140, 17),
-                Size = new Size(200, 25)
-            };
+                tableControls.RowStyles.Add(new RowStyle(SizeType.Absolute, 30F));
+            }
 
-            Label labelEquipmentName = new Label
+            // Champs du formulaire
+            var fields = new[]
             {
-                Text = "Nom Équipement:",
-                Location = new Point(10, 50),
-                Size = new Size(120, 20)
+                ("Code Équipement:", new TextBox(), "textBoxEquipmentCode"),
+                ("Nom Équipement:", new TextBox(), "textBoxEquipmentName"),
+                ("Numéro de Série:", new TextBox(), "textBoxSerialNumber"),
+                ("État:", new ComboBox(), "comboBoxState"),
+                ("N° Intervention:", new TextBox(), "textBoxInterventionNumber")
             };
 
-            textBoxEquipmentName = new TextBox
+            int row = 0;
+            foreach (var (labelText, control, name) in fields)
             {
-                Location = new Point(140, 47),
-                Size = new Size(200, 25)
-            };
+                // Configurer le label
+                var label = new Label
+                {
+                    Text = labelText,
+                    Anchor = AnchorStyles.Left | AnchorStyles.Right,
+                    TextAlign = ContentAlignment.MiddleLeft,
+                    Font = new Font(NORMAL_FONT, FontStyle.Regular)
+                };
 
-            Label labelSerialNumber = new Label
+                // Configurer le contrôle
+                control.Dock = DockStyle.Fill;
+                control.Name = name;
+
+                if (control is ComboBox comboBox)
+                {
+                    comboBox.DropDownStyle = ComboBoxStyle.DropDownList;
+                    comboBox.Items.AddRange(new object[] { "AVAILABLE", "INSTALLED" });
+                    comboBox.SelectedIndex = 0;
+                }
+
+                // Ajouter à la table
+                tableControls.Controls.Add(label, 0, row);
+                tableControls.Controls.Add(control, 1, row);
+
+                switch (name)
+                {
+                    case "textBoxEquipmentCode":
+                        textBoxEquipmentCode = (TextBox)control;
+                        break;
+                    case "textBoxEquipmentName":
+                        textBoxEquipmentName = (TextBox)control;
+                        break;
+                    case "textBoxSerialNumber":
+                        textBoxSerialNumber = (TextBox)control;
+                        break;
+                    case "comboBoxState":
+                        comboBoxState = (ComboBox)control;
+                        break;
+                    case "textBoxInterventionNumber":
+                        textBoxInterventionNumber = (TextBox)control;
+                        break;
+                }
+
+                row++;
+            }
+
+            // Boutons d'action
+            var buttonAddReception = new Button
             {
-                Text = "Numéro de Série:",
-                Location = new Point(10, 80),
-                Size = new Size(120, 20)
+                Text = "Ajouter équipement",
+                Size = new Size(160, 40),
+                FlatStyle = FlatStyle.Flat,
+                BackColor = PRIMARY_COLOR,
+                ForeColor = Color.White,
+                Font = BUTTON_FONT,
+                Cursor = Cursors.Hand
             };
+            buttonAddReception.FlatAppearance.BorderSize = 0;
+            buttonAddReception.Click += buttonAddReception_Click;
 
-            textBoxSerialNumber = new TextBox
+            var buttonSendReception = new Button
             {
-                Location = new Point(140, 77),
-                Size = new Size(200, 25)
+                Text = "Envoyer réception",
+                Size = new Size(160, 40),
+                FlatStyle = FlatStyle.Flat,
+                BackColor = SUCCESS_COLOR,
+                ForeColor = Color.White,
+                Font = BUTTON_FONT,
+                Cursor = Cursors.Hand
             };
+            buttonSendReception.FlatAppearance.BorderSize = 0;
+            buttonSendReception.Click += buttonSendReception_Click;
 
-            Label labelState = new Label
+            var buttonClearReception = new Button
             {
-                Text = "État:",
-                Location = new Point(10, 110),
-                Size = new Size(120, 20)
+                Text = "Vider la liste",
+                Size = new Size(160, 40),
+                FlatStyle = FlatStyle.Flat,
+                BackColor = DANGER_COLOR,
+                ForeColor = Color.White,
+                Font = BUTTON_FONT,
+                Cursor = Cursors.Hand
             };
-
-            comboBoxState = new ComboBox
+            buttonClearReception.FlatAppearance.BorderSize = 0;
+            buttonClearReception.Click += (s, e) =>
             {
-                Location = new Point(140, 107),
-                Size = new Size(200, 25),
-                DropDownStyle = ComboBoxStyle.DropDownList
+                if (MessageBox.Show("Êtes-vous sûr de vouloir vider la liste des équipements ?",
+                    "Confirmation", MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes)
+                {
+                    _receptionItems.Clear();
+                    RefreshReceptionGrid();
+                }
             };
-            comboBoxState.Items.AddRange(new string[] { "AVAILABLE", "INSTALLED" });
-            comboBoxState.SelectedIndex = 0;
 
-            Label labelInterventionNumber = new Label
+            // Mise en page des boutons
+            FlowLayoutPanel flowButtons = new FlowLayoutPanel
             {
-                Text = "N° Intervention:",
-                Location = new Point(10, 140),
-                Size = new Size(120, 20)
+                Dock = DockStyle.Fill,
+                FlowDirection = FlowDirection.LeftToRight,
+                WrapContents = false,
+                AutoSize = true,
+                AutoSizeMode = AutoSizeMode.GrowAndShrink
             };
 
-            textBoxInterventionNumber = new TextBox
+            flowButtons.Controls.Add(buttonAddReception);
+            flowButtons.Controls.Add(buttonSendReception);
+            flowButtons.Controls.Add(buttonClearReception);
+
+            tableControls.Controls.Add(flowButtons, 2, 1);
+            tableControls.SetRowSpan(flowButtons, 3);
+
+            groupBoxInput.Controls.Add(tableControls);
+
+            // DataGridView pour la liste des équipements
+            GroupBox groupBoxList = new GroupBox
             {
-                Location = new Point(140, 137),
-                Size = new Size(200, 25)
+                Text = "Liste des équipements à réceptionner",
+                Dock = DockStyle.Fill,
+                Padding = new Padding(15),
+                Font = new Font(NORMAL_FONT, FontStyle.Bold)
             };
 
-            buttonAddReception = new Button
-            {
-                Text = "Ajouter",
-                Location = new Point(400, 60),
-                Size = new Size(120, 40)
-            };
-            buttonAddReception.Click += new EventHandler(buttonAddReception_Click);
-
-            buttonSendReception = new Button
-            {
-                Text = "Envoyer Réception",
-                Location = new Point(550, 60),
-                Size = new Size(150, 40)
-            };
-            buttonSendReception.Click += new EventHandler(buttonSendReception_Click);
-
-            // Add controls to panel
-            panelInput.Controls.Add(labelEquipmentCode);
-            panelInput.Controls.Add(textBoxEquipmentCode);
-            panelInput.Controls.Add(labelEquipmentName);
-            panelInput.Controls.Add(textBoxEquipmentName);
-            panelInput.Controls.Add(labelSerialNumber);
-            panelInput.Controls.Add(textBoxSerialNumber);
-            panelInput.Controls.Add(labelState);
-            panelInput.Controls.Add(comboBoxState);
-            panelInput.Controls.Add(labelInterventionNumber);
-            panelInput.Controls.Add(textBoxInterventionNumber);
-            panelInput.Controls.Add(buttonAddReception);
-            panelInput.Controls.Add(buttonSendReception);
-
-            // DataGridView
             dataGridViewReception = new DataGridView
             {
                 Dock = DockStyle.Fill,
                 AllowUserToAddRows = false,
-                AllowUserToDeleteRows = false,
+                AllowUserToDeleteRows = true,
                 ReadOnly = true,
-                AutoGenerateColumns = true,
+                BackgroundColor = Color.White,
+                BorderStyle = BorderStyle.None,
+                CellBorderStyle = DataGridViewCellBorderStyle.SingleHorizontal,
+                ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.AutoSize,
                 AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
-                SelectionMode = DataGridViewSelectionMode.FullRowSelect
+                SelectionMode = DataGridViewSelectionMode.FullRowSelect,
+                RowHeadersVisible = false,
+                MultiSelect = false,
+                Font = NORMAL_FONT
             };
 
-            // Add to tab page
-            this.tabPageReception.Controls.Add(dataGridViewReception);
-            this.tabPageReception.Controls.Add(panelInput);
+            dataGridViewReception.AlternatingRowsDefaultCellStyle.BackColor = Color.FromArgb(245, 245, 245);
+            dataGridViewReception.ColumnHeadersDefaultCellStyle.BackColor = PRIMARY_COLOR;
+            dataGridViewReception.ColumnHeadersDefaultCellStyle.ForeColor = Color.White;
+            dataGridViewReception.ColumnHeadersDefaultCellStyle.Font = new Font(NORMAL_FONT, FontStyle.Bold);
+
+            // Ajouter un menu contextuel pour supprimer des équipements
+            var contextMenu = new ContextMenuStrip();
+            var deleteItem = new ToolStripMenuItem("Supprimer cet équipement");
+            deleteItem.Click += (s, e) =>
+            {
+                if (dataGridViewReception.SelectedRows.Count > 0 &&
+                    dataGridViewReception.SelectedRows[0].Index < _receptionItems.Count)
+                {
+                    _receptionItems.RemoveAt(dataGridViewReception.SelectedRows[0].Index);
+                    RefreshReceptionGrid();
+                }
+            };
+            contextMenu.Items.Add(deleteItem);
+            dataGridViewReception.ContextMenuStrip = contextMenu;
+
+            groupBoxList.Controls.Add(dataGridViewReception);
+
+            // Ajouter les groupes au tab
+            tabPageReception.Controls.Add(groupBoxList);
+            tabPageReception.Controls.Add(groupBoxInput);
         }
 
         private void InitializeExpeditionTab()
         {
-            // Input Panel
-            Panel panelInput = new Panel
+            // Structure similaire à l'onglet réception
+            GroupBox groupBoxInput = new GroupBox
             {
+                Text = "Ajout d'un équipement",
                 Dock = DockStyle.Top,
                 Height = 200,
-                Padding = new Padding(10)
+                Padding = new Padding(15),
+                Font = new Font(NORMAL_FONT, FontStyle.Bold)
             };
 
-            // Controls for expedition
-            Label labelExpEquipmentCode = new Label
+            TableLayoutPanel tableControls = new TableLayoutPanel
             {
-                Text = "Code Équipement:",
-                Location = new Point(10, 20),
-                Size = new Size(120, 20)
+                Dock = DockStyle.Fill,
+                ColumnCount = 3,
+                RowCount = 4,
+                Padding = new Padding(0, 10, 0, 0)
             };
 
-            textBoxExpEquipmentCode = new TextBox
+            tableControls.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 30F));
+            tableControls.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 40F));
+            tableControls.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 30F));
+
+            for (int i = 0; i < tableControls.RowCount; i++)
             {
-                Location = new Point(140, 17),
-                Size = new Size(200, 25)
-            };
+                tableControls.RowStyles.Add(new RowStyle(SizeType.Absolute, 30F));
+            }
 
-            Label labelExpEquipmentName = new Label
+            // Champs du formulaire
+            var fields = new[]
             {
-                Text = "Nom Équipement:",
-                Location = new Point(10, 50),
-                Size = new Size(120, 20)
+                ("Code Équipement:", new TextBox(), "textBoxExpEquipmentCode"),
+                ("Nom Équipement:", new TextBox(), "textBoxExpEquipmentName"),
+                ("Numéro de Série:", new TextBox(), "textBoxExpSerialNumber"),
+                ("Code Dépôt Cible:", new TextBox(), "textBoxTargetStockCode")
             };
 
-            textBoxExpEquipmentName = new TextBox
+            int row = 0;
+            foreach (var (labelText, control, name) in fields)
             {
-                Location = new Point(140, 47),
-                Size = new Size(200, 25)
-            };
+                var label = new Label
+                {
+                    Text = labelText,
+                    Anchor = AnchorStyles.Left | AnchorStyles.Right,
+                    TextAlign = ContentAlignment.MiddleLeft,
+                    Font = new Font(NORMAL_FONT, FontStyle.Regular)
+                };
 
-            Label labelExpSerialNumber = new Label
+                control.Dock = DockStyle.Fill;
+                control.Name = name;
+
+                tableControls.Controls.Add(label, 0, row);
+                tableControls.Controls.Add(control, 1, row);
+
+                switch (name)
+                {
+                    case "textBoxExpEquipmentCode":
+                        textBoxExpEquipmentCode = (TextBox)control;
+                        break;
+                    case "textBoxExpEquipmentName":
+                        textBoxExpEquipmentName = (TextBox)control;
+                        break;
+                    case "textBoxExpSerialNumber":
+                        textBoxExpSerialNumber = (TextBox)control;
+                        break;
+                    case "textBoxTargetStockCode":
+                        textBoxTargetStockCode = (TextBox)control;
+                        break;
+                }
+
+                row++;
+            }
+
+            // Boutons d'action
+            var buttonAddExpedition = new Button
             {
-                Text = "Numéro de Série:",
-                Location = new Point(10, 80),
-                Size = new Size(120, 20)
+                Text = "Ajouter équipement",
+                Size = new Size(160, 40),
+                FlatStyle = FlatStyle.Flat,
+                BackColor = PRIMARY_COLOR,
+                ForeColor = Color.White,
+                Font = BUTTON_FONT,
+                Cursor = Cursors.Hand
             };
+            buttonAddExpedition.FlatAppearance.BorderSize = 0;
+            buttonAddExpedition.Click += buttonAddExpedition_Click;
 
-            textBoxExpSerialNumber = new TextBox
+            var buttonSendExpedition = new Button
             {
-                Location = new Point(140, 77),
-                Size = new Size(200, 25)
+                Text = "Envoyer expédition",
+                Size = new Size(160, 40),
+                FlatStyle = FlatStyle.Flat,
+                BackColor = SUCCESS_COLOR,
+                ForeColor = Color.White,
+                Font = BUTTON_FONT,
+                Cursor = Cursors.Hand
             };
+            buttonSendExpedition.FlatAppearance.BorderSize = 0;
+            buttonSendExpedition.Click += buttonSendExpedition_Click;
 
-            Label labelTargetStockCode = new Label
+            var buttonClearExpedition = new Button
             {
-                Text = "Code Dépôt Cible:",
-                Location = new Point(10, 110),
-                Size = new Size(120, 20)
+                Text = "Vider la liste",
+                Size = new Size(160, 40),
+                FlatStyle = FlatStyle.Flat,
+                BackColor = DANGER_COLOR,
+                ForeColor = Color.White,
+                Font = BUTTON_FONT,
+                Cursor = Cursors.Hand
             };
-
-            textBoxTargetStockCode = new TextBox
+            buttonClearExpedition.FlatAppearance.BorderSize = 0;
+            buttonClearExpedition.Click += (s, e) =>
             {
-                Location = new Point(140, 107),
-                Size = new Size(200, 25)
+                if (MessageBox.Show("Êtes-vous sûr de vouloir vider la liste des équipements ?",
+                    "Confirmation", MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes)
+                {
+                    _expeditionItems.Clear();
+                    RefreshExpeditionGrid();
+                }
             };
 
-            buttonAddExpedition = new Button
+            FlowLayoutPanel flowButtons = new FlowLayoutPanel
             {
-                Text = "Ajouter",
-                Location = new Point(400, 60),
-                Size = new Size(120, 40)
+                Dock = DockStyle.Fill,
+                FlowDirection = FlowDirection.LeftToRight,
+                WrapContents = false,
+                AutoSize = true,
+                AutoSizeMode = AutoSizeMode.GrowAndShrink
             };
-            buttonAddExpedition.Click += new EventHandler(buttonAddExpedition_Click);
 
-            buttonSendExpedition = new Button
+            flowButtons.Controls.Add(buttonAddExpedition);
+            flowButtons.Controls.Add(buttonSendExpedition);
+            flowButtons.Controls.Add(buttonClearExpedition);
+
+            tableControls.Controls.Add(flowButtons, 2, 1);
+            tableControls.SetRowSpan(flowButtons, 3);
+
+            groupBoxInput.Controls.Add(tableControls);
+
+            // DataGridView pour la liste des équipements
+            GroupBox groupBoxList = new GroupBox
             {
-                Text = "Envoyer Expédition",
-                Location = new Point(550, 60),
-                Size = new Size(150, 40)
+                Text = "Liste des équipements à expédier",
+                Dock = DockStyle.Fill,
+                Padding = new Padding(15),
+                Font = new Font(NORMAL_FONT, FontStyle.Bold)
             };
-            buttonSendExpedition.Click += new EventHandler(buttonSendExpedition_Click);
 
-            // Add controls to panel
-            panelInput.Controls.Add(labelExpEquipmentCode);
-            panelInput.Controls.Add(textBoxExpEquipmentCode);
-            panelInput.Controls.Add(labelExpEquipmentName);
-            panelInput.Controls.Add(textBoxExpEquipmentName);
-            panelInput.Controls.Add(labelExpSerialNumber);
-            panelInput.Controls.Add(textBoxExpSerialNumber);
-            panelInput.Controls.Add(labelTargetStockCode);
-            panelInput.Controls.Add(textBoxTargetStockCode);
-            panelInput.Controls.Add(buttonAddExpedition);
-            panelInput.Controls.Add(buttonSendExpedition);
-
-            // DataGridView
             dataGridViewExpedition = new DataGridView
             {
                 Dock = DockStyle.Fill,
                 AllowUserToAddRows = false,
-                AllowUserToDeleteRows = false,
+                AllowUserToDeleteRows = true,
                 ReadOnly = true,
-                AutoGenerateColumns = true,
+                BackgroundColor = Color.White,
+                BorderStyle = BorderStyle.None,
+                CellBorderStyle = DataGridViewCellBorderStyle.SingleHorizontal,
+                ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.AutoSize,
                 AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
-                SelectionMode = DataGridViewSelectionMode.FullRowSelect
+                SelectionMode = DataGridViewSelectionMode.FullRowSelect,
+                RowHeadersVisible = false,
+                MultiSelect = false,
+                Font = NORMAL_FONT
             };
 
-            // Add to tab page
-            this.tabPageExpedition.Controls.Add(dataGridViewExpedition);
-            this.tabPageExpedition.Controls.Add(panelInput);
+            dataGridViewExpedition.AlternatingRowsDefaultCellStyle.BackColor = Color.FromArgb(245, 245, 245);
+            dataGridViewExpedition.ColumnHeadersDefaultCellStyle.BackColor = PRIMARY_COLOR;
+            dataGridViewExpedition.ColumnHeadersDefaultCellStyle.ForeColor = Color.White;
+            dataGridViewExpedition.ColumnHeadersDefaultCellStyle.Font = new Font(NORMAL_FONT, FontStyle.Bold);
+
+            // Menu contextuel pour supprimer
+            var contextMenu = new ContextMenuStrip();
+            var deleteItem = new ToolStripMenuItem("Supprimer cet équipement");
+            deleteItem.Click += (s, e) =>
+            {
+                if (dataGridViewExpedition.SelectedRows.Count > 0 &&
+                    dataGridViewExpedition.SelectedRows[0].Index < _expeditionItems.Count)
+                {
+                    _expeditionItems.RemoveAt(dataGridViewExpedition.SelectedRows[0].Index);
+                    RefreshExpeditionGrid();
+                }
+            };
+            contextMenu.Items.Add(deleteItem);
+            dataGridViewExpedition.ContextMenuStrip = contextMenu;
+
+            groupBoxList.Controls.Add(dataGridViewExpedition);
+
+            // Ajouter les groupes au tab
+            tabPageExpedition.Controls.Add(groupBoxList);
+            tabPageExpedition.Controls.Add(groupBoxInput);
         }
 
         private void LoadConfiguration()
         {
-            // Load configuration from settings or ask user
-            textBoxStockOutletCode.Text = "600048"; // Default for Eurodislog
+            textBoxStockOutletCode.Text = _config.DefaultStockOutletCode; // Default for Eurodislog
+            if (!string.IsNullOrEmpty(_config.Login))
+            {
+                buttonLogin.Text = "Reconnecter";
+            }
+
+            if (!string.IsNullOrEmpty(_config.TargetStockCode))
+            {
+                textBoxTargetStockCode.Text = _config.TargetStockCode;
+                _targetStockCode = _config.TargetStockCode;
+            }
         }
 
         private void SetupDataGridViews()
@@ -377,50 +689,134 @@ namespace PrestagoIntegration
             var bindingSource2 = new BindingSource();
             bindingSource2.DataSource = _expeditionItems;
             dataGridViewExpedition.DataSource = bindingSource2;
+
+            // Personnaliser l'affichage
+            CustomizeDataGridView(dataGridViewReception);
+            CustomizeDataGridView(dataGridViewExpedition);
+        }
+
+        private void CustomizeDataGridView(DataGridView dgv)
+        {
+            if (dgv.Columns.Count > 0)
+            {
+                // Renommer les colonnes avec des noms plus lisibles
+                var columnNames = new Dictionary<string, string>
+                {
+                    { "EquipmentCode", "Code équipement" },
+                    { "EquipmentName", "Nom équipement" },
+                    { "SerialNumber", "Numéro de série" },
+                    { "State", "État" },
+                    { "InterventionNumber", "N° Intervention" }
+                };
+
+                foreach (DataGridViewColumn column in dgv.Columns)
+                {
+                    if (columnNames.ContainsKey(column.DataPropertyName))
+                    {
+                        column.HeaderText = columnNames[column.DataPropertyName];
+                    }
+                }
+
+                // Ajouter une tooltip pour la suppression
+                dgv.CellToolTipText = "Clic-droit pour supprimer";
+            }
         }
 
         private async void buttonLogin_Click(object sender, EventArgs e)
         {
-            // Show login dialog and authenticate
             using (var loginForm = new LoginForm())
             {
                 if (loginForm.ShowDialog() == DialogResult.OK)
                 {
                     try
                     {
-                        Cursor = Cursors.WaitCursor;
-                        bool success = await _apiService.AuthenticateAsync(loginForm.Username, loginForm.Password);
+                        SetBusy(true, "Connexion en cours...");
+
+                        // Mettre à jour la configuration
+                        _config.Login = loginForm.Username;
+                        _config.Password = loginForm.Password;
+                        AppConfig.SaveConfig(_config);
+
+                        // Créer un nouveau service avec ces identifiants
+                        _prestagoService = new PrestagoService(
+                            _config.ApiUrl,
+                            loginForm.Username,
+                            loginForm.Password);
+
+                        bool success = await _prestagoService.AuthenticateAsync();
                         if (success)
                         {
                             MessageBox.Show("Connexion réussie!", "Succès", MessageBoxButtons.OK, MessageBoxIcon.Information);
                             statusLabel.Text = "Connecté";
+                            statusLabel.ForeColor = SUCCESS_COLOR;
+                            buttonLogin.Text = "Reconnecter";
                         }
                         else
                         {
                             MessageBox.Show("Échec de la connexion. Vérifiez vos identifiants.", "Erreur", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                            statusLabel.Text = "Non connecté";
+                            statusLabel.ForeColor = DANGER_COLOR;
                         }
                     }
                     catch (Exception ex)
                     {
                         MessageBox.Show($"Erreur: {ex.Message}", "Erreur", MessageBoxButtons.OK, MessageBoxIcon.Error);
                         Logger.LogError("Login", ex);
+                        statusLabel.Text = "Erreur de connexion";
+                        statusLabel.ForeColor = DANGER_COLOR;
                     }
                     finally
                     {
-                        Cursor = Cursors.Default;
+                        SetBusy(false);
                     }
                 }
             }
         }
 
+        private async void TestConnectionAsync()
+        {
+            try
+            {
+                SetBusy(true, "Test de connexion...");
+                bool success = await _prestagoService.AuthenticateAsync();
+                if (success)
+                {
+                    statusLabel.Text = "Connecté";
+                    statusLabel.ForeColor = SUCCESS_COLOR;
+                }
+                else
+                {
+                    statusLabel.Text = "Non connecté";
+                    statusLabel.ForeColor = DANGER_COLOR;
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.LogError("Test de connexion automatique", ex);
+                statusLabel.Text = "Erreur de connexion";
+                statusLabel.ForeColor = DANGER_COLOR;
+            }
+            finally
+            {
+                SetBusy(false);
+            }
+        }
+
         private void buttonAddReception_Click(object sender, EventArgs e)
         {
-            // Validate input fields
+            // Validation des entrées
             if (string.IsNullOrWhiteSpace(textBoxEquipmentCode.Text) ||
                 string.IsNullOrWhiteSpace(textBoxEquipmentName.Text) ||
                 string.IsNullOrWhiteSpace(textBoxSerialNumber.Text))
             {
                 MessageBox.Show("Veuillez remplir tous les champs obligatoires.", "Validation", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            // Vérifier si le NSE existe déjà
+            if (_receptionItems.Any(x => x.SerialNumber == textBoxSerialNumber.Text))
+            {
+                MessageBox.Show("Ce numéro de série existe déjà dans la liste.", "Doublon", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
 
@@ -456,6 +852,11 @@ namespace PrestagoIntegration
             // Clear fields
             ClearReceptionFields();
 
+            // Focus sur le premier champ pour faciliter la saisie
+            textBoxEquipmentCode.Focus();
+
+            // Notification
+            statusLabel.Text = $"Équipement ajouté : {item.SerialNumber}";
             Logger.Log($"NSE ajouté pour réception: {item.SerialNumber}");
         }
 
@@ -467,10 +868,17 @@ namespace PrestagoIntegration
                 return;
             }
 
+            // Confirmation
+            if (MessageBox.Show($"Êtes-vous sûr de vouloir envoyer {_receptionItems.Count} équipement(s) en réception ?",
+                "Confirmation", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
+            {
+                return;
+            }
+
             try
             {
-                Cursor = Cursors.WaitCursor;
-                bool success = await _apiService.SendReceptionAsync(textBoxStockOutletCode.Text, _receptionItems);
+                SetBusy(true, "Envoi en cours...");
+                bool success = await _prestagoService.SendReceptionAsync(textBoxStockOutletCode.Text, _receptionItems);
 
                 if (success)
                 {
@@ -478,26 +886,34 @@ namespace PrestagoIntegration
                     _receptionItems.Clear();
                     RefreshReceptionGrid();
                     Logger.Log($"Réception envoyée avec succès - {_receptionItems.Count} équipements");
+                    statusLabel.Text = "Réception envoyée avec succès";
+                    statusLabel.ForeColor = SUCCESS_COLOR;
                 }
                 else
                 {
                     MessageBox.Show("Échec de l'envoi de la réception.", "Erreur", MessageBoxButtons.OK, MessageBoxIcon.Error);
                     Logger.Log("Échec de l'envoi de la réception");
+                    statusLabel.Text = "Échec de l'envoi de la réception";
+                    statusLabel.ForeColor = DANGER_COLOR;
                 }
             }
             catch (Exception ex)
             {
                 MessageBox.Show($"Erreur: {ex.Message}", "Erreur", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 Logger.LogError("SendReception", ex);
+                statusLabel.Text = "Erreur lors de l'envoi";
+                statusLabel.ForeColor = DANGER_COLOR;
             }
             finally
             {
-                Cursor = Cursors.Default;
+                SetBusy(false);
             }
         }
+
         private void RefreshReceptionGrid()
         {
             ((BindingSource)dataGridViewReception.DataSource).ResetBindings(false);
+            CustomizeDataGridView(dataGridViewReception);
         }
 
         private void ClearReceptionFields()
@@ -511,7 +927,7 @@ namespace PrestagoIntegration
 
         private void buttonAddExpedition_Click(object sender, EventArgs e)
         {
-            // Validate input fields
+            // Validation des entrées
             if (string.IsNullOrWhiteSpace(textBoxExpEquipmentCode.Text) ||
                 string.IsNullOrWhiteSpace(textBoxExpEquipmentName.Text) ||
                 string.IsNullOrWhiteSpace(textBoxExpSerialNumber.Text))
@@ -520,11 +936,26 @@ namespace PrestagoIntegration
                 return;
             }
 
-            // Save target stock code
-            if (!string.IsNullOrWhiteSpace(textBoxTargetStockCode.Text))
+            // Vérifier si le NSE existe déjà
+            if (_expeditionItems.Any(x => x.SerialNumber == textBoxExpSerialNumber.Text))
             {
-                _targetStockCode = textBoxTargetStockCode.Text;
+                MessageBox.Show("Ce numéro de série existe déjà dans la liste.", "Doublon", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
             }
+
+            // Vérifier si le dépôt cible est spécifié
+            if (string.IsNullOrWhiteSpace(textBoxTargetStockCode.Text))
+            {
+                MessageBox.Show("Veuillez spécifier un code de dépôt cible.", "Validation", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            // Save target stock code
+            _targetStockCode = textBoxTargetStockCode.Text;
+
+            // Sauvegarder dans la configuration
+            _config.TargetStockCode = _targetStockCode;
+            AppConfig.SaveConfig(_config);
 
             // Create new item
             var item = new ExpeditionItem
@@ -540,9 +971,14 @@ namespace PrestagoIntegration
             // Refresh grid
             RefreshExpeditionGrid();
 
-            // Clear fields
+            // Clear fields except target stock code
             ClearExpeditionFields();
 
+            // Focus sur le premier champ pour faciliter la saisie
+            textBoxExpEquipmentCode.Focus();
+
+            // Notification
+            statusLabel.Text = $"Équipement ajouté : {item.SerialNumber}";
             Logger.Log($"NSE ajouté pour expédition: {item.SerialNumber}");
         }
 
@@ -560,9 +996,16 @@ namespace PrestagoIntegration
                 return;
             }
 
+            // Confirmation
+            if (MessageBox.Show($"Êtes-vous sûr de vouloir expédier {_expeditionItems.Count} équipement(s) vers le dépôt {_targetStockCode} ?",
+                "Confirmation", MessageBoxButtons.YesNo, MessageBoxIcon.Question) != DialogResult.Yes)
+            {
+                return;
+            }
+
             try
             {
-                Cursor = Cursors.WaitCursor;
+                SetBusy(true, "Envoi en cours...");
 
                 var expeditionRequest = new ExpeditionRequest
                 {
@@ -570,7 +1013,7 @@ namespace PrestagoIntegration
                     TargetStockCode = _targetStockCode
                 };
 
-                bool success = await _apiService.SendExpeditionAsync(textBoxStockOutletCode.Text, expeditionRequest);
+                bool success = await _prestagoService.SendExpeditionAsync(textBoxStockOutletCode.Text, expeditionRequest);
 
                 if (success)
                 {
@@ -578,27 +1021,34 @@ namespace PrestagoIntegration
                     _expeditionItems.Clear();
                     RefreshExpeditionGrid();
                     Logger.Log($"Expédition envoyée avec succès - {expeditionRequest.StockEquipments.Count} équipements");
+                    statusLabel.Text = "Expédition envoyée avec succès";
+                    statusLabel.ForeColor = SUCCESS_COLOR;
                 }
                 else
                 {
                     MessageBox.Show("Échec de l'envoi de l'expédition.", "Erreur", MessageBoxButtons.OK, MessageBoxIcon.Error);
                     Logger.Log("Échec de l'envoi de l'expédition");
+                    statusLabel.Text = "Échec de l'envoi de l'expédition";
+                    statusLabel.ForeColor = DANGER_COLOR;
                 }
             }
             catch (Exception ex)
             {
                 MessageBox.Show($"Erreur: {ex.Message}", "Erreur", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 Logger.LogError("SendExpedition", ex);
+                statusLabel.Text = "Erreur lors de l'envoi";
+                statusLabel.ForeColor = DANGER_COLOR;
             }
             finally
             {
-                Cursor = Cursors.Default;
+                SetBusy(false);
             }
         }
 
         private void RefreshExpeditionGrid()
         {
             ((BindingSource)dataGridViewExpedition.DataSource).ResetBindings(false);
+            CustomizeDataGridView(dataGridViewExpedition);
         }
 
         private void ClearExpeditionFields()
@@ -607,6 +1057,68 @@ namespace PrestagoIntegration
             textBoxExpEquipmentName.Text = "";
             textBoxExpSerialNumber.Text = "";
             // Ne pas effacer le code de dépôt cible
+        }
+
+        // Méthodes d'utilitaires d'UI
+        private void SetBusy(bool isBusy, string statusText = null)
+        {
+            // Mettre à jour le statut
+            if (statusText != null)
+            {
+                statusLabel.Text = statusText;
+                statusLabel.ForeColor = TEXT_COLOR;
+            }
+
+            // Afficher/masquer la barre de progression
+            progressBar.Visible = isBusy;
+            if (isBusy)
+            {
+                progressBar.Style = ProgressBarStyle.Marquee;
+            }
+
+            // Changer le curseur
+            this.UseWaitCursor = isBusy;
+
+            // Désactiver/activer les contrôles principaux
+            buttonLogin.Enabled = !isBusy;
+            buttonSettings.Enabled = !isBusy;
+            tabControl.Enabled = !isBusy;
+
+            // Forcer la mise à jour de l'interface
+            Application.DoEvents();
+        }
+
+        private void ShowConfigurationForm()
+        {
+            using (var configForm = new ConfigurationForm(_config))
+            {
+                if (configForm.ShowDialog() == DialogResult.OK)
+                {
+                    // Réinitialiser le service avec les nouvelles configurations
+                    _prestagoService = new PrestagoService(
+                        _config.ApiUrl,
+                        _config.Login,
+                        _config.Password);
+
+                    // Mettre à jour l'interface
+                    textBoxStockOutletCode.Text = _config.DefaultStockOutletCode;
+                    TestConnectionAsync();
+                }
+            }
+        }
+
+        private void ShowAboutDialog()
+        {
+            MessageBox.Show(
+                "PMU Prestago Integration\n" +
+                "Version 1.0.0\n\n" +
+                "Cette application permet l'intégration avec le système Prestago de PMU pour gérer les réceptions et expéditions d'équipements.\n\n" +
+                "© 2024 BDEQUEKER.\n" +
+                "Tous droits réservés.",
+                "À propos",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information
+            );
         }
     }
 }

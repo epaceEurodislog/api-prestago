@@ -1,4 +1,3 @@
-
 using System;
 using System.IO;
 using System.Text.Json;
@@ -11,11 +10,14 @@ namespace PrestagoIntegration.Utils
         public string ApiUrl { get; set; } = "https://prestago-test.pmu.fr/";
         public string Login { get; set; }
         public string Password { get; set; }
-        
+
         // Configuration par défaut
         public string DefaultStockOutletCode { get; set; } = "600048";
 
-        private static AppConfig _instance;
+        // Ajout de la propriété manquante
+        public string TargetStockCode { get; set; } = "";
+
+        private static AppConfig? _instance;
         private static readonly string CONFIG_FILE = "config.json";
 
         private AppConfig() { }
@@ -46,7 +48,7 @@ namespace PrestagoIntegration.Utils
             {
                 Console.WriteLine($"Erreur lors du chargement de la configuration : {ex.Message}");
             }
-            
+
             // Configuration par défaut si fichier non trouvé ou erreur
             var config = new AppConfig();
             SaveConfig(config);

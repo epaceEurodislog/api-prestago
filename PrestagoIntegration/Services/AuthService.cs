@@ -11,8 +11,8 @@ namespace PrestagoIntegration.Services
     {
         private readonly HttpClient _httpClient;
         private readonly AppConfig _config;
-        private string _xsrfToken;
-        private string _jsessionId;
+        private string? _xsrfToken; // Nullable
+        private string? _jsessionId; // Nullable
 
         public AuthService(HttpClient httpClient, AppConfig config)
         {
@@ -21,7 +21,7 @@ namespace PrestagoIntegration.Services
         }
 
         /// <summary>
-        /// Authentification à l'API Prestago en utilisant l'authentification Basic
+        /// Authentification à l'API Prestago
         /// </summary>
         /// <returns>True si l'authentification a réussi, False sinon</returns>
         public async Task<bool> AuthenticateAsync()
@@ -119,7 +119,7 @@ namespace PrestagoIntegration.Services
         /// <param name="cookie">Chaîne du cookie</param>
         /// <param name="cookieName">Nom du cookie à extraire</param>
         /// <returns>Valeur du cookie</returns>
-        private string ExtractCookieValue(string cookie, string cookieName)
+        private string? ExtractCookieValue(string cookie, string cookieName)
         {
             var parts = cookie.Split(';');
             foreach (var part in parts)

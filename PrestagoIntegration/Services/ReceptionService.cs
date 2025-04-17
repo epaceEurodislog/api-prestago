@@ -1,3 +1,4 @@
+// Services/ReceptionService.cs
 using System;
 using System.Collections.Generic;
 using System.Net.Http;
@@ -13,71 +14,60 @@ namespace PrestagoIntegration.Services
     {
         private readonly HttpClient _httpClient;
         private readonly AuthService _authService;
-        private readonly AppConfig _config;
 
-        public ReceptionService(HttpClient httpClient, AuthService authService, AppConfig config)
+        public ReceptionService(HttpClient httpClient, AuthService authService)
         {
             _httpClient = httpClient;
             _authService = authService;
-            _config = config;
         }
 
-        /// <summary>
-        /// Envoi d'une réception de NSE à l'API Prestago
-        /// </summary>
-        /// <param name="stockOutletCode">Code du dépôt Prestago</param>
-        /// <param name="nseItems">Liste des NSE à réceptionner</param>
-        /// <returns>True si l'opération a réussi, False sinon</returns>
-        public async Task<bool> SendReceptionAsync(string stockOutletCode, List<NSEItem> nseItems)
+        public async Task<bool> SendReceptionAsync(string stockOutletCode, List<ReceptionItem> items)
         {
             try
             {
-                Logger.Log($"Envoi de la réception des NSE pour le dépôt {stockOutletCode}");
+                Logger.Log($"Envoi de réception pour le dépôt {stockOutletCode}");
 
-                // S'assurer que l'authentification est valide
+                // S'assurer que nous sommes authentifiés
                 if (!_authService.HasValidTokens())
                 {
-                    bool authenticated = await _authService.AuthenticateAsync();
-                    if (!authenticated)
+                    bool success = await _authService.AuthenticateAsync();
+                    if (!success)
                     {
-                        Logger.Log("Échec de l'authentification à l'API Prestago");
+                        Logger.Log("Échec de l'authentification, impossible d'envoyer la réception");
                         return false;
                     }
                 }
 
-                // Préparation de la requête
+                // Créer la requête POST
                 var request = new HttpRequestMessage(HttpMethod.Post, $"api/stock-equipments/{stockOutletCode}/reception");
 
-                // Ajout des headers d'authentification
-                _authService.AddAuthHeaders(request);
+                // Ajouter les en-têtes d'authentification
+                _authService.AddAuthHeadersToRequest(request);
 
-                // Préparation du contenu de la requête
-                // IMPORTANT: Le corps est directement la liste des NSE (pas d'objet parent)
-                var json = JsonSerializer.Serialize(nseItems);
+                // Ajouter le contenu JSON (un tableau d'objets)
+                var json = JsonSerializer.Serialize(items);
                 request.Content = new StringContent(json, Encoding.UTF8, "application/json");
 
-                // Envoi de la requête
+                // Envoyer la requête
                 var response = await _httpClient.SendAsync(request);
 
-                var statusCode = response.StatusCode;
-                Logger.Log($"Réponse de l'API : {statusCode}");
-
-                // Succès si code 204 (No Content)
+                // Vérifier le code de statut (204 = succès)
                 if (response.StatusCode == System.Net.HttpStatusCode.NoContent)
                 {
-                    Logger.Log("Réception envoyée avec succès");
+                    Logger.Log("Réception réussie (statut 204)");
                     return true;
                 }
                 else
                 {
-                    var responseContent = await response.Content.ReadAsStringAsync();
-                    Logger.Log($"Erreur lors de l'envoi de la réception : {responseContent}");
+                    // En cas d'erreur, essayer de récupérer le message d'erreur
+                    string errorContent = await response.Content.ReadAsStringAsync();
+                    Logger.Log($"Échec de la réception. Statut: {response.StatusCode}, Détails: {errorContent}");
                     return false;
                 }
             }
             catch (Exception ex)
             {
-                Logger.LogError("SendReceptionAsync", ex);
+                Logger.LogError("Exception lors de l'envoi de la réception", ex);
                 return false;
             }
         }

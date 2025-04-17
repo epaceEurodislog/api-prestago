@@ -1,4 +1,6 @@
 using System;
+using System.ComponentModel;
+using System.Drawing;
 using System.Windows.Forms;
 
 namespace PrestagoIntegration.Forms
@@ -10,7 +12,13 @@ namespace PrestagoIntegration.Forms
         private Button buttonLogin;
         private Button buttonCancel;
 
+        // Correction des attributs pour éviter les erreurs de sérialisation
+        [Browsable(false)]
+        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
         public string Username { get; private set; }
+
+        [Browsable(false)]
+        [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)]
         public string Password { get; private set; }
 
         public LoginForm()

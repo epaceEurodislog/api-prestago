@@ -1,3 +1,4 @@
+// Services/ExpeditionService.cs
 using System;
 using System.Net.Http;
 using System.Text;
@@ -23,50 +24,49 @@ namespace PrestagoIntegration.Services
         {
             try
             {
-                Logger.Log($"Envoi de l'expédition des NSE pour le dépôt {stockOutletCode}");
+                Logger.Log($"Envoi d'expédition pour le dépôt {stockOutletCode}");
 
-                // S'assurer que l'authentification est valide
+                // S'assurer que nous sommes authentifiés
                 if (!_authService.HasValidTokens())
                 {
-                    bool authenticated = await _authService.AuthenticateAsync();
-                    if (!authenticated)
+                    bool success = await _authService.AuthenticateAsync();
+                    if (!success)
                     {
-                        Logger.Log("Échec de l'authentification à l'API Prestago");
+                        Logger.Log("Échec de l'authentification, impossible d'envoyer l'expédition");
                         return false;
                     }
                 }
 
-                // Préparation de la requête
+                // Créer la requête POST
                 var request = new HttpRequestMessage(HttpMethod.Post, $"api/stock-equipments/{stockOutletCode}/removal-send");
 
-                // Ajout des headers d'authentification
-                _authService.AddAuthHeaders(request);
+                // Ajouter les en-têtes d'authentification
+                _authService.AddAuthHeadersToRequest(request);
 
-                // Préparation du contenu de la requête
+                // Ajouter le contenu JSON
                 var json = JsonSerializer.Serialize(expeditionRequest);
                 request.Content = new StringContent(json, Encoding.UTF8, "application/json");
 
-                // Envoi de la requête
+                // Envoyer la requête
                 var response = await _httpClient.SendAsync(request);
 
-                Logger.Log($"Réponse de l'API : {response.StatusCode}");
-
-                // Succès si code 204 (No Content)
+                // Vérifier le code de statut (204 = succès)
                 if (response.StatusCode == System.Net.HttpStatusCode.NoContent)
                 {
-                    Logger.Log("Expédition envoyée avec succès");
+                    Logger.Log("Expédition réussie (statut 204)");
                     return true;
                 }
                 else
                 {
-                    var responseContent = await response.Content.ReadAsStringAsync();
-                    Logger.Log($"Erreur lors de l'envoi de l'expédition : {responseContent}");
+                    // En cas d'erreur, essayer de récupérer le message d'erreur
+                    string errorContent = await response.Content.ReadAsStringAsync();
+                    Logger.Log($"Échec de l'expédition. Statut: {response.StatusCode}, Détails: {errorContent}");
                     return false;
                 }
             }
             catch (Exception ex)
             {
-                Logger.LogError("SendExpeditionAsync", ex);
+                Logger.LogError("Exception lors de l'envoi de l'expédition", ex);
                 return false;
             }
         }
