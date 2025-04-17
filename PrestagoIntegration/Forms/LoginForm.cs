@@ -28,84 +28,99 @@ namespace PrestagoIntegration.Forms
 
         private void InitializeComponent()
         {
-            this.textBoxUsername = new System.Windows.Forms.TextBox();
-            this.textBoxPassword = new System.Windows.Forms.TextBox();
-            this.buttonLogin = new System.Windows.Forms.Button();
-            this.buttonCancel = new System.Windows.Forms.Button();
             this.SuspendLayout();
-            // 
-            // textBoxUsername
-            // 
-            this.textBoxUsername.Location = new System.Drawing.Point(122, 50);
-            this.textBoxUsername.Name = "textBoxUsername";
-            this.textBoxUsername.Size = new System.Drawing.Size(230, 23);
-            this.textBoxUsername.TabIndex = 0;
-            // 
-            // textBoxPassword
-            // 
-            this.textBoxPassword.Location = new System.Drawing.Point(122, 100);
-            this.textBoxPassword.Name = "textBoxPassword";
-            this.textBoxPassword.PasswordChar = '*';
-            this.textBoxPassword.Size = new System.Drawing.Size(230, 23);
-            this.textBoxPassword.TabIndex = 1;
-            // 
-            // buttonLogin
-            // 
-            this.buttonLogin.Location = new System.Drawing.Point(122, 150);
-            this.buttonLogin.Name = "buttonLogin";
-            this.buttonLogin.Size = new System.Drawing.Size(100, 30);
-            this.buttonLogin.TabIndex = 2;
-            this.buttonLogin.Text = "Se connecter";
-            this.buttonLogin.UseVisualStyleBackColor = true;
-            this.buttonLogin.Click += new System.EventHandler(this.buttonLogin_Click);
-            // 
-            // buttonCancel
-            // 
-            this.buttonCancel.Location = new System.Drawing.Point(252, 150);
-            this.buttonCancel.Name = "buttonCancel";
-            this.buttonCancel.Size = new System.Drawing.Size(100, 30);
-            this.buttonCancel.TabIndex = 3;
-            this.buttonCancel.Text = "Annuler";
-            this.buttonCancel.UseVisualStyleBackColor = true;
-            this.buttonCancel.Click += new System.EventHandler(this.buttonCancel_Click);
-            // 
-            // LoginForm
-            // 
-            this.AcceptButton = this.buttonLogin;
-            this.AutoScaleDimensions = new System.Drawing.SizeF(7F, 15F);
-            this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
-            this.CancelButton = this.buttonCancel;
-            this.ClientSize = new System.Drawing.Size(384, 211);
-            this.Controls.Add(this.buttonCancel);
-            this.Controls.Add(this.buttonLogin);
-            this.Controls.Add(this.textBoxPassword);
-            this.Controls.Add(this.textBoxUsername);
-            this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedDialog;
+
+            // Configuration du formulaire
+            this.Text = "Connexion";
+            this.Size = new System.Drawing.Size(400, 180); // Taille ajustée
+            this.StartPosition = FormStartPosition.CenterParent;
+            this.FormBorderStyle = FormBorderStyle.FixedDialog;
             this.MaximizeBox = false;
             this.MinimizeBox = false;
-            this.Name = "LoginForm";
-            this.StartPosition = System.Windows.Forms.FormStartPosition.CenterParent;
-            this.Text = "Connexion";
-            this.ResumeLayout(false);
-            this.PerformLayout();
 
-            // Add labels
+            // Panel principal
+            TableLayoutPanel mainPanel = new TableLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                Padding = new Padding(20, 20, 20, 10),
+                ColumnCount = 2,
+                RowCount = 3
+            };
+
+            mainPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 30F));
+            mainPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 70F));
+            mainPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 30F));
+            mainPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 30F));
+            mainPanel.RowStyles.Add(new RowStyle(SizeType.Absolute, 50F));
+
+            // Labels et champs de texte
             Label labelUsername = new Label
             {
                 Text = "Identifiant:",
-                Location = new System.Drawing.Point(20, 53),
-                Size = new System.Drawing.Size(100, 20)
+                Dock = DockStyle.Fill,
+                TextAlign = ContentAlignment.MiddleLeft
+            };
+
+            textBoxUsername = new TextBox
+            {
+                Dock = DockStyle.Fill,
+                Margin = new Padding(0, 3, 0, 3)
             };
 
             Label labelPassword = new Label
             {
                 Text = "Mot de passe:",
-                Location = new System.Drawing.Point(20, 103),
-                Size = new System.Drawing.Size(100, 20)
+                Dock = DockStyle.Fill,
+                TextAlign = ContentAlignment.MiddleLeft
             };
 
-            this.Controls.Add(labelUsername);
-            this.Controls.Add(labelPassword);
+            textBoxPassword = new TextBox
+            {
+                Dock = DockStyle.Fill,
+                PasswordChar = '*',
+                Margin = new Padding(0, 3, 0, 3)
+            };
+
+            // Panel de boutons
+            FlowLayoutPanel buttonPanel = new FlowLayoutPanel
+            {
+                Dock = DockStyle.Fill,
+                FlowDirection = FlowDirection.RightToLeft,
+                Margin = new Padding(0, 10, 0, 0)
+            };
+
+            buttonLogin = new Button
+            {
+                Text = "Se connecter",
+                Size = new Size(110, 28),
+                Margin = new Padding(5, 0, 0, 0)
+            };
+            buttonLogin.Click += buttonLogin_Click;
+
+            buttonCancel = new Button
+            {
+                Text = "Annuler",
+                Size = new Size(90, 28)
+            };
+            buttonCancel.Click += buttonCancel_Click;
+
+            buttonPanel.Controls.Add(buttonCancel);
+            buttonPanel.Controls.Add(buttonLogin);
+
+            // Ajouter tous les contrôles au panel principal
+            mainPanel.Controls.Add(labelUsername, 0, 0);
+            mainPanel.Controls.Add(textBoxUsername, 1, 0);
+            mainPanel.Controls.Add(labelPassword, 0, 1);
+            mainPanel.Controls.Add(textBoxPassword, 1, 1);
+            mainPanel.Controls.Add(buttonPanel, 1, 2);
+
+            // Ajouter le panel au formulaire
+            this.Controls.Add(mainPanel);
+
+            this.AcceptButton = buttonLogin;
+            this.CancelButton = buttonCancel;
+
+            this.ResumeLayout(false);
         }
 
         private void buttonLogin_Click(object sender, EventArgs e)

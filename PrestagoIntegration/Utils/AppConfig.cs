@@ -18,9 +18,11 @@ namespace PrestagoIntegration.Utils
         public string TargetStockCode { get; set; } = "";
 
         private static AppConfig? _instance;
-        private static readonly string CONFIG_FILE = "config.json";
+        private static readonly string CONFIG_FILE = Path.Combine(
+    Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+    "PrestagoIntegration",
+    "config.json");
 
-        private AppConfig() { }
 
         public static AppConfig Instance
         {
@@ -38,6 +40,13 @@ namespace PrestagoIntegration.Utils
         {
             try
             {
+                // Assurez-vous que le dossier existe
+                string directory = Path.GetDirectoryName(CONFIG_FILE);
+                if (!Directory.Exists(directory))
+                {
+                    Directory.CreateDirectory(directory);
+                }
+
                 if (File.Exists(CONFIG_FILE))
                 {
                     string json = File.ReadAllText(CONFIG_FILE);
@@ -59,8 +68,16 @@ namespace PrestagoIntegration.Utils
         {
             try
             {
+                // Assurez-vous que le dossier existe
+                string directory = Path.GetDirectoryName(CONFIG_FILE);
+                if (!Directory.Exists(directory))
+                {
+                    Directory.CreateDirectory(directory);
+                }
+
                 string json = JsonSerializer.Serialize(config, new JsonSerializerOptions { WriteIndented = true });
                 File.WriteAllText(CONFIG_FILE, json);
+                Console.WriteLine($"Configuration sauvegardée dans {CONFIG_FILE}");
             }
             catch (Exception ex)
             {

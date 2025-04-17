@@ -275,134 +275,136 @@ namespace PrestagoIntegration
             this.PerformLayout();
         }
 
+        // Dans la méthode InitializeReceptionTab()
         private void InitializeReceptionTab()
         {
             // Panel pour les contrôles de saisie
-            GroupBox groupBoxInput = new GroupBox
+            Panel panelInput = new Panel
+            {
+                Dock = DockStyle.Top,
+                Height = 160,
+                Padding = new Padding(10)
+            };
+
+            // Label titre
+            Label labelTitle = new Label
             {
                 Text = "Ajout d'un équipement",
-                Dock = DockStyle.Top,
-                Height = 200,
-                Padding = new Padding(15),
-                Font = new Font(NORMAL_FONT, FontStyle.Bold)
+                Font = new Font("Segoe UI", 10, FontStyle.Bold),
+                Location = new Point(10, 10),
+                AutoSize = true
             };
 
-            // Créer une disposition en tableau pour les champs de saisie
-            TableLayoutPanel tableControls = new TableLayoutPanel
+            // Créer un TableLayoutPanel pour organiser les champs
+            TableLayoutPanel tableFields = new TableLayoutPanel
             {
-                Dock = DockStyle.Fill,
-                ColumnCount = 3,
+                Location = new Point(10, 35),
+                Size = new Size(600, 120),
+                ColumnCount = 2,
                 RowCount = 5,
-                Padding = new Padding(0, 10, 0, 0)
+                AutoSize = false
             };
 
-            tableControls.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 30F));
-            tableControls.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 40F));
-            tableControls.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 30F));
+            tableFields.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 120F)); // Largeur fixe pour les labels
+            tableFields.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
 
-            for (int i = 0; i < tableControls.RowCount; i++)
-            {
-                tableControls.RowStyles.Add(new RowStyle(SizeType.Absolute, 30F));
-            }
-
-            // Champs du formulaire
-            var fields = new (string Label, Control Control, string Name)[]
-            {
-                ("Code Équipement:", new TextBox(), "textBoxEquipmentCode"),
-                ("Nom Équipement:", new TextBox(), "textBoxEquipmentName"),
-                ("Numéro de Série:", new TextBox(), "textBoxSerialNumber"),
-                ("État:", new ComboBox(), "comboBoxState"),
-                ("N° Intervention:", new TextBox(), "textBoxInterventionNumber")
-            };
+            // Configuration des champs
+            Dictionary<string, (string Label, Control Control)> fields = new Dictionary<string, (string, Control)>
+    {
+        { "Code", ("Code:", new TextBox()) },
+        { "Nom", ("Nom:", new TextBox()) },
+        { "NumeroSerie", ("Numéro de:", new TextBox()) },
+        { "Etat", ("État:", new ComboBox()) },
+        { "Intervention", ("N° Intervention:", new TextBox()) }
+    };
 
             int row = 0;
-            foreach (var (labelText, control, name) in fields)
+            foreach (var field in fields)
             {
-                // Configurer le label
-                var label = new Label
+                Label label = new Label
                 {
-                    Text = labelText,
-                    Anchor = AnchorStyles.Left | AnchorStyles.Right,
+                    Text = field.Value.Label,
                     TextAlign = ContentAlignment.MiddleLeft,
-                    Font = new Font(NORMAL_FONT, FontStyle.Regular)
+                    Dock = DockStyle.Fill
                 };
 
-                // Configurer le contrôle
+                Control control = field.Value.Control;
                 control.Dock = DockStyle.Fill;
-                control.Name = name;
+                control.Margin = new Padding(0, 3, 0, 3);
 
                 if (control is ComboBox comboBox)
                 {
                     comboBox.DropDownStyle = ComboBoxStyle.DropDownList;
                     comboBox.Items.AddRange(new object[] { "AVAILABLE", "INSTALLED" });
                     comboBox.SelectedIndex = 0;
+                    comboBoxState = comboBox;
                 }
-
-                // Ajouter à la table
-                tableControls.Controls.Add(label, 0, row);
-                tableControls.Controls.Add(control, 1, row);
-
-                switch (name)
+                else if (control is TextBox textBox)
                 {
-                    case "textBoxEquipmentCode":
-                        textBoxEquipmentCode = (TextBox)control;
-                        break;
-                    case "textBoxEquipmentName":
-                        textBoxEquipmentName = (TextBox)control;
-                        break;
-                    case "textBoxSerialNumber":
-                        textBoxSerialNumber = (TextBox)control;
-                        break;
-                    case "comboBoxState":
-                        comboBoxState = (ComboBox)control;
-                        break;
-                    case "textBoxInterventionNumber":
-                        textBoxInterventionNumber = (TextBox)control;
-                        break;
+                    switch (field.Key)
+                    {
+                        case "Code":
+                            textBoxEquipmentCode = textBox;
+                            break;
+                        case "Nom":
+                            textBoxEquipmentName = textBox;
+                            break;
+                        case "NumeroSerie":
+                            textBoxSerialNumber = textBox;
+                            break;
+                        case "Intervention":
+                            textBoxInterventionNumber = textBox;
+                            break;
+                    }
                 }
 
+                tableFields.Controls.Add(label, 0, row);
+                tableFields.Controls.Add(control, 1, row);
                 row++;
             }
 
-            // Boutons d'action
-            var buttonAddReception = new Button
+            // Panel pour les boutons
+            Panel buttonPanel = new Panel
             {
-                Text = "Ajouter équipement",
-                Size = new Size(160, 40),
-                FlatStyle = FlatStyle.Flat,
-                BackColor = PRIMARY_COLOR,
-                ForeColor = Color.White,
-                Font = BUTTON_FONT,
-                Cursor = Cursors.Hand
+                Dock = DockStyle.Right,
+                Width = 340,
+                Height = 120,
+                Location = new Point(620, 35)
             };
-            buttonAddReception.FlatAppearance.BorderSize = 0;
-            buttonAddReception.Click += buttonAddReception_Click;
 
-            var buttonSendReception = new Button
+            // Boutons d'action alignés horizontalement
+            Button buttonAdd = new Button
             {
-                Text = "Envoyer réception",
-                Size = new Size(160, 40),
-                FlatStyle = FlatStyle.Flat,
-                BackColor = SUCCESS_COLOR,
+                Text = "Ajouter",
+                Size = new Size(100, 30),
+                Location = new Point(10, 45),
+                BackColor = Color.FromArgb(0, 122, 204),
                 ForeColor = Color.White,
-                Font = BUTTON_FONT,
-                Cursor = Cursors.Hand
+                FlatStyle = FlatStyle.Flat
             };
-            buttonSendReception.FlatAppearance.BorderSize = 0;
-            buttonSendReception.Click += buttonSendReception_Click;
+            buttonAdd.Click += buttonAddReception_Click;
 
-            var buttonClearReception = new Button
+            Button buttonSend = new Button
+            {
+                Text = "Envoyer",
+                Size = new Size(100, 30),
+                Location = new Point(120, 45),
+                BackColor = Color.FromArgb(40, 167, 69),
+                ForeColor = Color.White,
+                FlatStyle = FlatStyle.Flat
+            };
+            buttonSend.Click += buttonSendReception_Click;
+
+            Button buttonClear = new Button
             {
                 Text = "Vider la liste",
-                Size = new Size(160, 40),
-                FlatStyle = FlatStyle.Flat,
-                BackColor = DANGER_COLOR,
+                Size = new Size(100, 30),
+                Location = new Point(230, 45),
+                BackColor = Color.FromArgb(220, 53, 69),
                 ForeColor = Color.White,
-                Font = BUTTON_FONT,
-                Cursor = Cursors.Hand
+                FlatStyle = FlatStyle.Flat
             };
-            buttonClearReception.FlatAppearance.BorderSize = 0;
-            buttonClearReception.Click += (s, e) =>
+            buttonClear.Click += (s, e) =>
             {
                 if (MessageBox.Show("Êtes-vous sûr de vouloir vider la liste des équipements ?",
                     "Confirmation", MessageBoxButtons.YesNo, MessageBoxIcon.Question) == DialogResult.Yes)
@@ -412,32 +414,21 @@ namespace PrestagoIntegration
                 }
             };
 
-            // Mise en page des boutons
-            FlowLayoutPanel flowButtons = new FlowLayoutPanel
-            {
-                Dock = DockStyle.Fill,
-                FlowDirection = FlowDirection.LeftToRight,
-                WrapContents = false,
-                AutoSize = true,
-                AutoSizeMode = AutoSizeMode.GrowAndShrink
-            };
+            buttonPanel.Controls.Add(buttonAdd);
+            buttonPanel.Controls.Add(buttonSend);
+            buttonPanel.Controls.Add(buttonClear);
 
-            flowButtons.Controls.Add(buttonAddReception);
-            flowButtons.Controls.Add(buttonSendReception);
-            flowButtons.Controls.Add(buttonClearReception);
+            // Ajouter les éléments au panel principal
+            panelInput.Controls.Add(labelTitle);
+            panelInput.Controls.Add(tableFields);
+            panelInput.Controls.Add(buttonPanel);
 
-            tableControls.Controls.Add(flowButtons, 2, 1);
-            tableControls.SetRowSpan(flowButtons, 3);
-
-            groupBoxInput.Controls.Add(tableControls);
-
-            // DataGridView pour la liste des équipements
+            // DataGridView pour la liste
             GroupBox groupBoxList = new GroupBox
             {
                 Text = "Liste des équipements à réceptionner",
                 Dock = DockStyle.Fill,
-                Padding = new Padding(15),
-                Font = new Font(NORMAL_FONT, FontStyle.Bold)
+                Padding = new Padding(10)
             };
 
             dataGridViewReception = new DataGridView
@@ -448,21 +439,13 @@ namespace PrestagoIntegration
                 ReadOnly = true,
                 BackgroundColor = Color.White,
                 BorderStyle = BorderStyle.None,
-                CellBorderStyle = DataGridViewCellBorderStyle.SingleHorizontal,
-                ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.AutoSize,
                 AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill,
                 SelectionMode = DataGridViewSelectionMode.FullRowSelect,
                 RowHeadersVisible = false,
-                MultiSelect = false,
-                Font = NORMAL_FONT
+                MultiSelect = false
             };
 
-            dataGridViewReception.AlternatingRowsDefaultCellStyle.BackColor = Color.FromArgb(245, 245, 245);
-            dataGridViewReception.ColumnHeadersDefaultCellStyle.BackColor = PRIMARY_COLOR;
-            dataGridViewReception.ColumnHeadersDefaultCellStyle.ForeColor = Color.White;
-            dataGridViewReception.ColumnHeadersDefaultCellStyle.Font = new Font(NORMAL_FONT, FontStyle.Bold);
-
-            // Ajouter un menu contextuel pour supprimer des équipements
+            // Configuration du menu contextuel
             var contextMenu = new ContextMenuStrip();
             var deleteItem = new ToolStripMenuItem("Supprimer cet équipement");
             deleteItem.Click += (s, e) =>
@@ -479,9 +462,9 @@ namespace PrestagoIntegration
 
             groupBoxList.Controls.Add(dataGridViewReception);
 
-            // Ajouter les groupes au tab
+            // Ajouter les panels au tab
             tabPageReception.Controls.Add(groupBoxList);
-            tabPageReception.Controls.Add(groupBoxInput);
+            tabPageReception.Controls.Add(panelInput);
         }
 
         private void InitializeExpeditionTab()
