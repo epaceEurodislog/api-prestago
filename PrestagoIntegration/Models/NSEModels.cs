@@ -1,4 +1,3 @@
-
 using System;
 using System.Collections.Generic;
 using System.Text.Json.Serialization;
@@ -10,12 +9,6 @@ namespace PrestagoIntegration.Models
     /// </summary>
     public class NSEItem
     {
-        /// <summary>
-        /// Code du dépôt Prestago
-        /// </summary>
-        [JsonPropertyName("stockOutletCode")]
-        public string StockOutletCode { get; set; }
-
         /// <summary>
         /// Code de l'équipement (correspond au code article)
         /// </summary>
@@ -35,15 +28,16 @@ namespace PrestagoIntegration.Models
         public string SerialNumber { get; set; }
 
         /// <summary>
-        /// État de l'équipement (ex: "INSTALLER", "AVAILABLE", etc.)
+        /// État de l'équipement (ex: "AVAILABLE", "INSTALLED", etc.)
+        /// IMPORTANT: Modifié de "Status" à "State" pour correspondre à l'API
         /// </summary>
-        [JsonPropertyName("status")]
-        public string Status { get; set; } = "AVAILABLE";
+        [JsonPropertyName("state")]
+        public string State { get; set; } = "AVAILABLE";
 
         /// <summary>
         /// Numéro d'intervention
         /// </summary>
         [JsonPropertyName("interventionNumber")]
-        public string InterventionNumber { get; set; } = "";
+        public int? InterventionNumber { get; set; }
     }
 }

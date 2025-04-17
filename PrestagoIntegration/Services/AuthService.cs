@@ -1,4 +1,3 @@
-
 using System;
 using System.Net.Http;
 using System.Text;
@@ -22,7 +21,7 @@ namespace PrestagoIntegration.Services
         }
 
         /// <summary>
-        /// Authentification à l'API Prestago
+        /// Authentification à l'API Prestago en utilisant l'authentification Basic
         /// </summary>
         /// <returns>True si l'authentification a réussi, False sinon</returns>
         public async Task<bool> AuthenticateAsync()
@@ -31,19 +30,15 @@ namespace PrestagoIntegration.Services
             {
                 Logger.Log("Authentification à l'API Prestago");
 
+                // Préparation de l'authentification Basic
+                string credentials = Convert.ToBase64String(Encoding.ASCII.GetBytes($"{_config.Login}:{_config.Password}"));
+
                 // Création de la requête d'authentification
-                var requestContent = new StringContent(
-                    JsonSerializer.Serialize(new
-                    {
-                        login = _config.Login,
-                        password = _config.Password
-                    }),
-                    Encoding.UTF8,
-                    "application/json"
-                );
+                var request = new HttpRequestMessage(HttpMethod.Get, "api/user");
+                request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Basic", credentials);
 
                 // Envoi de la requête d'authentification
-                var response = await _httpClient.PostAsync("api/user", requestContent);
+                var response = await _httpClient.SendAsync(request);
 
                 response.EnsureSuccessStatusCode();
 
@@ -63,8 +58,51 @@ namespace PrestagoIntegration.Services
                     }
                 }
 
-                bool isAuthenticated = !string.IsNullOrEmpty(_xsrfToken) && !string.IsNullOrEmpty(_jsessionId);
+                // Si on n'a pas de XSRF-TOKEN, on regarde dans les cookies de la réponse
+                if (string.IsNullOrEmpty(_xsrfToken))
+                {
+                    var responseCookies = response.Headers.GetValues("Set-Cookie");
+                    foreach (var cookie in responseCookies)
+                    {
+                        if (cookie.Contains("XSRF-TOKEN"))
+                        {
+                            _xsrfToken = ExtractCookieValue(cookie, "XSRF-TOKEN");
+                            break;
+                        }
+                    }
+                }
+
+                // Une deuxième requête pour obtenir le XSRF-TOKEN si nécessaire
+                if (string.IsNullOrEmpty(_xsrfToken) && !string.IsNullOrEmpty(_jsessionId))
+                {
+                    Logger.Log("Tentative d'obtention du XSRF-TOKEN via une seconde requête");
+
+                    var secondRequest = new HttpRequestMessage(HttpMethod.Get, "api/user");
+                    secondRequest.Headers.Add("Cookie", $"JSESSIONID={_jsessionId}");
+
+                    var secondResponse = await _httpClient.SendAsync(secondRequest);
+
+                    if (secondResponse.IsSuccessStatusCode &&
+                        secondResponse.Headers.TryGetValues("Set-Cookie", out var secondCookies))
+                    {
+                        foreach (var cookie in secondCookies)
+                        {
+                            if (cookie.Contains("XSRF-TOKEN"))
+                            {
+                                _xsrfToken = ExtractCookieValue(cookie, "XSRF-TOKEN");
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                bool isAuthenticated = !string.IsNullOrEmpty(_jsessionId); // Même sans XSRF, on peut être authentifié
                 Logger.Log($"Authentification {(isAuthenticated ? "réussie" : "échouée")}");
+                if (isAuthenticated)
+                {
+                    Logger.Log($"JSESSIONID: {_jsessionId}");
+                    Logger.Log($"XSRF-TOKEN: {_xsrfToken ?? "Non disponible"}");
+                }
 
                 return isAuthenticated;
             }
@@ -101,10 +139,27 @@ namespace PrestagoIntegration.Services
         /// <param name="request">Requête HTTP à modifier</param>
         public void AddAuthHeaders(HttpRequestMessage request)
         {
-            if (!string.IsNullOrEmpty(_xsrfToken) && !string.IsNullOrEmpty(_jsessionId))
+            string cookieHeader = "";
+
+            if (!string.IsNullOrEmpty(_jsessionId))
             {
-                request.Headers.Add("Cookie", $"XSRF-TOKEN={_xsrfToken}; JSESSIONID={_jsessionId}");
+                cookieHeader += $"JSESSIONID={_jsessionId}";
+            }
+
+            if (!string.IsNullOrEmpty(_xsrfToken))
+            {
+                if (!string.IsNullOrEmpty(cookieHeader))
+                    cookieHeader += "; ";
+
+                cookieHeader += $"XSRF-TOKEN={_xsrfToken}";
+
+                // Ajouter également le header X-XSRF-TOKEN
                 request.Headers.Add("X-XSRF-TOKEN", _xsrfToken);
+            }
+
+            if (!string.IsNullOrEmpty(cookieHeader))
+            {
+                request.Headers.Add("Cookie", cookieHeader);
             }
         }
 
@@ -113,7 +168,7 @@ namespace PrestagoIntegration.Services
         /// </summary>
         public bool HasValidTokens()
         {
-            return !string.IsNullOrEmpty(_xsrfToken) && !string.IsNullOrEmpty(_jsessionId);
+            return !string.IsNullOrEmpty(_jsessionId); // Le JSESSIONID est l'essentiel
         }
     }
 }
