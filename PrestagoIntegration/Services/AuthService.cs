@@ -170,5 +170,10 @@ namespace PrestagoIntegration.Services
         {
             return !string.IsNullOrEmpty(_jsessionId); // Le JSESSIONID est l'essentiel
         }
+
+        public void AddAuthHeadersToRequest(HttpRequestMessage request)
+        {
+            AddAuthHeaders(request); // Appeler la méthode existante
+        }
     }
 }

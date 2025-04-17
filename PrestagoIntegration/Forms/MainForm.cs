@@ -43,6 +43,20 @@ namespace PrestagoIntegration
         private ToolStripStatusLabel statusLabel;
         private ToolStripProgressBar progressBar;
 
+
+        private TextBox textBoxEquipmentCode;
+        private TextBox textBoxEquipmentName;
+        private TextBox textBoxSerialNumber;
+        private ComboBox comboBoxState;
+        private TextBox textBoxInterventionNumber;
+        private DataGridView dataGridViewReception;
+
+        private TextBox textBoxExpEquipmentCode;
+        private TextBox textBoxExpEquipmentName;
+        private TextBox textBoxExpSerialNumber;
+        private TextBox textBoxTargetStockCode;
+        private DataGridView dataGridViewExpedition;
+
         public MainForm()
         {
             InitializeComponent();
@@ -292,7 +306,7 @@ namespace PrestagoIntegration
             }
 
             // Champs du formulaire
-            var fields = new[]
+            var fields = new (string Label, Control Control, string Name)[]
             {
                 ("Code Équipement:", new TextBox(), "textBoxEquipmentCode"),
                 ("Nom Équipement:", new TextBox(), "textBoxEquipmentName"),
@@ -717,8 +731,15 @@ namespace PrestagoIntegration
                     }
                 }
 
-                // Ajouter une tooltip pour la suppression
-                dgv.CellToolTipText = "Clic-droit pour supprimer";
+                dgv.CellMouseEnter += (s, e) =>
+                {
+                    if (e.RowIndex >= 0 && e.ColumnIndex >= 0)
+                    {
+                        dgv.Cursor = Cursors.Hand;
+                        ToolTip tooltip = new ToolTip();
+                        tooltip.SetToolTip(dgv, "Clic-droit pour supprimer");
+                    }
+                };
             }
         }
 
@@ -1112,9 +1133,7 @@ namespace PrestagoIntegration
             MessageBox.Show(
                 "PMU Prestago Integration\n" +
                 "Version 1.0.0\n\n" +
-                "Cette application permet l'intégration avec le système Prestago de PMU pour gérer les réceptions et expéditions d'équipements.\n\n" +
-                "© 2024 BDEQUEKER.\n" +
-                "Tous droits réservés.",
+                "Cette application permet l'intégration avec le système Prestago de PMU pour gérer les réceptions et expéditions d'équipements.\n",
                 "À propos",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Information

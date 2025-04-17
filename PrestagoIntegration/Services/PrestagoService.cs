@@ -25,12 +25,11 @@ namespace PrestagoIntegration.Services
                 BaseAddress = new System.Uri(baseUrl)
             };
 
-            _authService = new AuthService(_httpClient, new AppConfig
-            {
-                ApiUrl = baseUrl,
-                Login = login,
-                Password = password
-            });
+            var config = AppConfig.Instance;
+            config.ApiUrl = baseUrl;
+            config.Login = login;
+            config.Password = password;
+            _authService = new AuthService(_httpClient, config);
         }
 
         public async Task<bool> AuthenticateAsync()
